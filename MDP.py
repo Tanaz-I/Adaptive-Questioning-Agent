@@ -1,9 +1,12 @@
 
 class MDP:
-    def __init__(self, topics, difficulty_types, q_types):
+    def __init__(self, topics, difficulty_types, q_types, w1, w2, w3):
         self.int_to_actions = {}
         self.actions_to_int = {}
         self.n_actions = len(topics) * len(difficulty_types) * len(q_types)
+        self.w1 = w1
+        self.w2 = w2
+        self.w3 = w3
 
         for topic in topics:
             for diff_type in difficulty_types:
