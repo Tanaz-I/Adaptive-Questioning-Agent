@@ -1,23 +1,30 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
+from knowledge_state import KnowledgeState, difficulty_level, question_types
+from MDP import MDP
+from policy_network import PolicyNetwork
+from Simulator import Simulator
 
+class AdaptiveAgent:
 
-class Agent:
+    def __init__(self, topics_difficulty, w1, w2, w3, n_episodes=500, n_questions=25):
+        self.mdp = MDP(list(topics_difficulty), difficulty_types = ['basic', 'intermediate', 'advanced'], q_types = ['factual', 'inferential', 'evaluative'], w1 = w1, w2 = w2, w3 = w3)
+        self.policy_network  = PolicyNetwork(num_topics = len(topics_difficulty), num_actions = len(topics_difficulty) * 3 * 3)
+        self.simulator = Simulator(topic_difficulty = topics_difficulty)
+        self.ks = KnowledgeState(topics_difficulty = topics_difficulty, window_size = 10)
+        self.optimizer = torch.optim.AdamW( self.policy_network.parameters(), lr = 1e-4)
+        self.pretrain()
 
-    def __init__(self, mdp, policy_network, simulator, knowledge_state, optimizer):
-        self.mdp = mdp
-        self.policy_network  = policy_network
-        self.simulator = simulator
-        self.ks = knowledge_state
-        self.optimizer = optimizer
-
-    def select_action(self, state_vector):
+    def select_action(self, state_vector, training = False):
         state  = torch.FloatTensor(state_vector)
         logits = self.policy_network(state)
         probs  = F.softmax(logits, dim=-1)
         dist   = torch.distributions.Categorical(probs)
-        action = dist.sample()
+        if training:
+            action = dist.sample()
+        else:
+            action = torch.argmax(probs)
         return action.item(), dist.log_prob(action)
 
     def run_episode(self, n_questions=25):
@@ -38,7 +45,7 @@ class Agent:
 
         for _ in range(n_questions):
             state_vector = self.ks.get_state_vector()
-            action_idx, log_prob = self.select_action(state_vector)
+            action_idx, log_prob = self.select_action(state_vector, training = True)
             topic, difficulty, question_type = self.mdp.decode(action_idx)
 
             prev_score = self.ks.topic_score[topic]
@@ -52,7 +59,7 @@ class Agent:
 
         return log_probs, rewards
 
-    def update_policy(self, log_probs, rewards, gamma=0.99):
+    def update_policy_pretrain(self, log_probs, rewards, gamma=0.99):
         G = 0
         returns = []
         for r in reversed(rewards):
@@ -71,13 +78,18 @@ class Agent:
         self.optimizer.step()
 
         return loss.item()
+    
+    def update_NLP(self, topic, score, difficulty, question_type):
+        prev_score = self.ks.topic_score[topic]
+        self.ks.update(topic, score, difficulty, question_type)
+        return self.mdp.compute_reward(self.ks, topic, score, prev_score)
 
     def pretrain(self, n_episodes=500, n_questions=25, gamma=0.99):
         total_losses = []
 
         for episode in range(n_episodes):
             log_probs, rewards = self.run_episode(n_questions)
-            loss = self.update_policy(log_probs, rewards, gamma)
+            loss = self.update_policy_pretrain(log_probs, rewards, gamma)
             total_losses.append(loss)
 
             if (episode + 1) % 50 == 0:
