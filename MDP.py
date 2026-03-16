@@ -15,7 +15,12 @@ class MDP:
                     val = len(self.int_to_actions)
                     self.actions_to_int[combo] = val
                     self.int_to_actions[val] = combo
-
+    def encode(self, action_commb):
+        return self.actions_to_int.get(action_commb, - 1)
+    
+    def decode(self, action_idx):
+        return self.int_to_actions.get(action_idx, -1)
+    
     def compute_reward(self, ks, topic, score, prev_score):
         #ks -> obj of KnowledgeState
         improvement = score - prev_score
