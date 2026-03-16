@@ -5,6 +5,7 @@ from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from policy_network import PolicyNetwork
 from Simulator import Simulator
+import matplotlib.pyplot as plt
 
 class AdaptiveAgent:
 
@@ -59,7 +60,7 @@ class AdaptiveAgent:
 
         return log_probs, rewards
 
-    def update_policy_pretrain(self, log_probs, rewards, gamma=0.99):
+    def update_policy_pretrain(self, log_probs, rewards, gamma=0.99, entropy_coef = 0.05):
         G = 0
         returns = []
         for r in reversed(rewards):
@@ -68,10 +69,15 @@ class AdaptiveAgent:
 
         returns = torch.FloatTensor(returns)
         returns = (returns - returns.mean()) / (returns.std() + 1e-8)
-        loss = []
+        policy_loss = []
+        entropy_loss = []
+
         for log_prob, G_t in zip(log_probs, returns):
-            loss.append(-log_prob * G_t)
-        loss = torch.stack(loss).sum()
+            policy_loss.append(-log_prob * G_t)
+            # entropy of full distribution, not just sampled action
+            entropy_loss.append(log_prob * torch.exp(log_prob))  # entropy ≈ -log_prob
+        
+        loss = torch.stack(policy_loss).sum() - entropy_coef * torch.stack(entropy_loss).sum()
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -79,12 +85,12 @@ class AdaptiveAgent:
 
         return loss.item()
     
-    def update_NLP(self, topic, score, difficulty, question_type):
+    def update(self, topic, score, difficulty, question_type):
         prev_score = self.ks.topic_score[topic]
         self.ks.update(topic, score, difficulty, question_type)
         return self.mdp.compute_reward(self.ks, topic, score, prev_score)
 
-    def pretrain(self, n_episodes=500, n_questions=25, gamma=0.99):
+    def pretrain(self, n_episodes=500, n_questions=100, gamma=0.99):
         total_losses = []
 
         for episode in range(n_episodes):
@@ -96,5 +102,7 @@ class AdaptiveAgent:
                 avg_loss   = np.mean(total_losses[-50:])
                 avg_reward = np.mean(rewards)
                 print(f"Episode {episode+1}/{n_episodes} | " f"Avg Loss: {avg_loss:.4f} | " f"Avg Reward: {avg_reward:.4f}")
+        plt.plot(np.arange(len(total_losses)), total_losses)
+        plt.show()
 
         return total_losses
