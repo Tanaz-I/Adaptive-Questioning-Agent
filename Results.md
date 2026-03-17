@@ -22,3 +22,7 @@
     ## Attempt 3:
     ![Score_plot_attempt 3 ](Images/evaluation_plot_3.png)
     ![Mastery_plot_attempt 3 ](Images/mastery_plot_3.png)
+
+    ## Summary 
+    Avg Topics Mastered:  Baseline 2.60  vs  RL 3.20  (+23%)
+    Avg Final Score:      Baseline 0.820 vs  RL 0.851  (+3.8%)

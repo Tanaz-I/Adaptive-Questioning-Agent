@@ -230,7 +230,7 @@ def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=10, n_questio
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('Images/evaluation_plot_3.png', dpi=150)
+    plt.savefig('Images/evaluation_plot_4.png', dpi=150)
     plt.show()
 
     # 2. Per-topic mastery rate bar chart
@@ -246,7 +246,7 @@ def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=10, n_questio
     plt.title('Per-Topic Mastery Rate — RL Agent vs Baseline')
     plt.legend()
     plt.tight_layout()
-    plt.savefig('Images/mastery_plot_3.png', dpi=150)
+    plt.savefig('Images/mastery_plot_4.png', dpi=150)
     plt.show()
 
 
