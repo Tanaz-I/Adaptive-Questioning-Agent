@@ -1,5 +1,5 @@
-<b> <h2> Results for REINFORCE with regularization : 
-<h3> Policy network
+<h2> <b>  Results for REINFORCE with regularization :  </h2>
+<h3> Policy network</h3>
 ```python 
 self.input_size  = num_topics * 7 
 self.fc1         = nn.Linear(self.input_size, hidden_size1)
@@ -7,7 +7,12 @@ self.fc2         = nn.Linear(hidden_size1, hidden_size2)
 self.fc3         = nn.Linear(hidden_size2, num_actions)
 self.dropout     = nn.Dropout(dropout)
 ```
-<b> <h3> Reward_weights
+<h3> <b> Reward_weights </h3>
 weight_improvement = 0.4, weight_coverage_penalty = 0.5, weight_mastery_penalty = 0.1
 
-<b> <h3>Results:
+## Results:
+## Attempt 1:
+![Mastery_plot_attempt 1 ](Adaptive-Questioning-Agent/Images/evaluation_plot_1.png)
+
+## Attempt 2:
+![Mastery_plot_attempt 2 ](Adaptive-Questioning-Agent/Images/evaluation_plot_2.png)

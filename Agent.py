@@ -9,13 +9,13 @@ import matplotlib.pyplot as plt
 
 class AdaptiveAgent:
 
-    def __init__(self, topics_difficulty, w1, w2, w3, n_episodes=500, n_questions=25):
-        self.mdp = MDP(list(topics_difficulty), difficulty_types = ['basic', 'intermediate', 'advanced'], q_types = ['factual', 'inferential', 'evaluative'], w1 = w1, w2 = w2, w3 = w3)
+    def __init__(self, topics_difficulty, w1, w2, w3, n_episodes=3000, n_questions=100):
+        self.mdp = MDP(list(topics_difficulty.keys()), difficulty_types = ['basic', 'intermediate', 'advanced'], q_types = ['factual', 'inferential', 'evaluative'], w1 = w1, w2 = w2, w3 = w3)
         self.policy_network  = PolicyNetwork(num_topics = len(topics_difficulty), num_actions = len(topics_difficulty) * 3 * 3)
         self.simulator = Simulator(topic_difficulty = topics_difficulty)
         self.ks = KnowledgeState(topics_difficulty = topics_difficulty, window_size = 10)
         self.optimizer = torch.optim.AdamW( self.policy_network.parameters(), lr = 1e-4)
-        self.pretrain()
+        self.pretrain(n_episodes =n_episodes, n_questions = n_questions)
 
     def select_action(self, state_vector, training = False):
         state  = torch.FloatTensor(state_vector)
@@ -25,7 +25,7 @@ class AdaptiveAgent:
             dist   = torch.distributions.Categorical(probs)
             action = dist.sample()
         else:
-            temperature = 0.5  # < 1 = more focused, > 1 = more random
+            temperature = 0.7  # < 1 = more focused, > 1 = more random
             probs  = F.softmax(logits / temperature, dim=-1)
             dist   = torch.distributions.Categorical(probs)
             action = dist.sample()

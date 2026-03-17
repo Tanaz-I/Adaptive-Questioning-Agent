@@ -33,10 +33,11 @@ class MDP:
             coverage_bonus = 0.7
         elif ks.trend(topic) < 0:
             coverage_bonus = 0.4
-        else:
-            coverage_bonus = 0.0
         if ks.attempts[topic] > 5 and ks.topic_score[topic] < 0.2:
             coverage_bonus = -0.5
+        else:
+            coverage_bonus = 0.0
+        
         
         mastery_penalty = 1.0 if ks.is_mastered(topic) else 0.0
         return self.w1 * improvement + self.w2 * coverage_bonus - self.w3 * mastery_penalty

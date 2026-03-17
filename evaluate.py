@@ -134,7 +134,7 @@ def print_per_topic_report(topics, topics_difficulty,
 # Main evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=1, n_questions=500):
+def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=10, n_questions=500):
     """
     Compare RL agent vs rule-based baseline on n_students simulated students.
     Both agents face identical simulated students for fair comparison.
@@ -230,7 +230,7 @@ def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=1, n_question
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('Images/evaluation_plot_1.png', dpi=150)
+    plt.savefig('Images/evaluation_plot_3.png', dpi=150)
     plt.show()
 
     # 2. Per-topic mastery rate bar chart
@@ -246,7 +246,7 @@ def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=1, n_question
     plt.title('Per-Topic Mastery Rate — RL Agent vs Baseline')
     plt.legend()
     plt.tight_layout()
-    plt.savefig('Images/mastery_plot_1.png', dpi=150)
+    plt.savefig('Images/mastery_plot_3.png', dpi=150)
     plt.show()
 
 
@@ -263,7 +263,7 @@ if __name__ == "__main__":
 
     evaluate(
         topics_difficulty,
-        w1=0.6, w2=0.3, w3=0.1,
-        n_students=1,
+        w1=0.4, w2=0.5, w3=0.1,
+        n_students=10,
         n_questions=100
     )
