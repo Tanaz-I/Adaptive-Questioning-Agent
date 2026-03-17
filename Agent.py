@@ -26,7 +26,7 @@ class AdaptiveAgent:
             action = dist.sample()
         else:
             action = torch.argmax(probs)
-        return action.item(), dist.log_prob(action)
+        return action.item(), dist.log_prob(action), dist.entropy()
 
     def run_episode(self, n_questions=25):
         """
@@ -43,10 +43,12 @@ class AdaptiveAgent:
 
         log_probs = []
         rewards   = []
+        entropies = []
 
         for _ in range(n_questions):
             state_vector = self.ks.get_state_vector()
-            action_idx, log_prob = self.select_action(state_vector, training = True)
+            action_idx, log_prob, entropy = self.select_action(state_vector, training = True)
+            entropies.append(entropy)
             topic, difficulty, question_type = self.mdp.decode(action_idx)
 
             prev_score = self.ks.topic_score[topic]
@@ -58,9 +60,9 @@ class AdaptiveAgent:
             log_probs.append(log_prob)
             rewards.append(reward)
 
-        return log_probs, rewards
+        return log_probs, rewards, entropies
 
-    def update_policy_pretrain(self, log_probs, rewards, gamma=0.99, entropy_coef = 0.05):
+    def update_policy_pretrain(self, log_probs, rewards, entropies, gamma=0.99, entropy_coef = 0.05):
         G = 0
         returns = []
         for r in reversed(rewards):
@@ -70,12 +72,10 @@ class AdaptiveAgent:
         returns = torch.FloatTensor(returns)
         returns = (returns - returns.mean()) / (returns.std() + 1e-8)
         policy_loss = []
-        entropy_loss = []
+        entropy_loss = [-e for e in entropies]
 
         for log_prob, G_t in zip(log_probs, returns):
             policy_loss.append(-log_prob * G_t)
-            # entropy of full distribution, not just sampled action
-            entropy_loss.append(log_prob * torch.exp(log_prob))  # entropy ≈ -log_prob
         
         loss = torch.stack(policy_loss).sum() - entropy_coef * torch.stack(entropy_loss).sum()
 
@@ -94,8 +94,8 @@ class AdaptiveAgent:
         total_losses = []
 
         for episode in range(n_episodes):
-            log_probs, rewards = self.run_episode(n_questions)
-            loss = self.update_policy_pretrain(log_probs, rewards, gamma)
+            log_probs, rewards, entropies = self.run_episode(n_questions)
+            loss = self.update_policy_pretrain(log_probs, rewards, entropies, gamma)
             total_losses.append(loss)
 
             if (episode + 1) % 50 == 0:

@@ -8,8 +8,8 @@ class Simulator:
         self.difficulties  = ['basic', 'intermediate', 'advanced']
         self.question_types = ['factual', 'inferential', 'evaluative']
 
-        self.question_difficulty_penalty = {'basic' : 0.05, 'intermediate' : 0.1, 'advanced' : 0.2}
-        self.question_type_penalty = {'factual' : 0.05, 'inferential' : 0.05, 'evaluative' : 0.1}
+        self.question_difficulty_penalty = {'basic' : 0, 'intermediate' : 0.05, 'advanced' : 0.1}
+        self.question_type_penalty = {'factual' : 0, 'inferential' : 0.02, 'evaluative' : 0.05}
         self.mastery_topic = {topic: np.random.uniform(0, 1) for topic in topic_difficulty.keys()}
 
     def reset_mastery_scores(self):

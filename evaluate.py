@@ -36,7 +36,9 @@ class RuleBasedAgent:
                 max(difficulty_level.index(self.curr_diff[topic]) - 1, 0)
             ]
 
-        return topic, self.curr_diff[topic], 'factual'
+        qtype_cycle = ['factual', 'inferential', 'evaluative']
+        qtype = qtype_cycle[self.topic_idx % 3]
+        return topic, self.curr_diff[topic], qtype
 
     def update(self, topic, score, difficulty, question_type):
         self.last_score[topic] = score
@@ -69,7 +71,7 @@ def run_agent_session(agent, simulator, topics, n_questions, is_rl=True):
     for step in range(n_questions):
         if is_rl:
             state_vector        = agent.ks.get_state_vector()
-            action_idx, _       = agent.select_action(state_vector, training=False)
+            action_idx, _ , _     = agent.select_action(state_vector, training=False)
             topic, diff, qtype  = agent.mdp.decode(action_idx)
         else:
             topic, diff, qtype  = agent.select_action()
@@ -130,7 +132,7 @@ def print_per_topic_report(topics, topics_difficulty,
 # Main evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate(topics_difficulty, w1=0.6, w2=0.3, w3=0.1, n_students=20, n_questions=25):
+def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=100, n_questions=100):
     """
     Compare RL agent vs rule-based baseline on n_students simulated students.
     Both agents face identical simulated students for fair comparison.

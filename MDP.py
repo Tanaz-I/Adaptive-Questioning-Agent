@@ -15,6 +15,7 @@ class MDP:
                     val = len(self.int_to_actions)
                     self.actions_to_int[combo] = val
                     self.int_to_actions[val] = combo
+
     def encode(self, action_commb):
         return self.actions_to_int.get(action_commb, - 1)
     
@@ -26,8 +27,10 @@ class MDP:
         improvement = score - prev_score
         if ks.is_neglected(topic):
             coverage_bonus = 1.0
+        elif ks.attempts[topic] < 5:
+            coverage_bonus = 0.7
         elif ks.trend(topic) < 0:
-            coverage_bonus = 0.5
+            coverage_bonus = 0.4
         else:
             coverage_bonus = 0.0
         
