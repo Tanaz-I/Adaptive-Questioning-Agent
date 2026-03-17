@@ -265,5 +265,5 @@ if __name__ == "__main__":
         topics_difficulty,
         w1=0.4, w2=0.5, w3=0.1,
         n_students=10,
-        n_questions=100
+        n_questions=500
     )
