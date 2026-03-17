@@ -12,7 +12,7 @@ weight_improvement = 0.4, weight_coverage_penalty = 0.5, weight_mastery_penalty 
 
 ## Results:
 ## Attempt 1:
-![Mastery_plot_attempt 1 ](Adaptive-Questioning-Agent/Images/evaluation_plot_1.png)
+![Mastery_plot_attempt 1 ](Images/evaluation_plot_1.png)
 
 ## Attempt 2:
-![Mastery_plot_attempt 2 ](Adaptive-Questioning-Agent/Images/evaluation_plot_2.png)
+![Mastery_plot_attempt 2 ](Images/evaluation_plot_2.png)
