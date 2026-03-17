@@ -20,12 +20,15 @@ class AdaptiveAgent:
     def select_action(self, state_vector, training = False):
         state  = torch.FloatTensor(state_vector)
         logits = self.policy_network(state)
-        probs  = F.softmax(logits, dim=-1)
-        dist   = torch.distributions.Categorical(probs)
         if training:
+            probs  = F.softmax(logits, dim=-1)
+            dist   = torch.distributions.Categorical(probs)
             action = dist.sample()
         else:
-            action = torch.argmax(probs)
+            temperature = 0.5  # < 1 = more focused, > 1 = more random
+            probs  = F.softmax(logits / temperature, dim=-1)
+            dist   = torch.distributions.Categorical(probs)
+            action = dist.sample()
         return action.item(), dist.log_prob(action), dist.entropy()
 
     def run_episode(self, n_questions=25):
@@ -62,7 +65,7 @@ class AdaptiveAgent:
 
         return log_probs, rewards, entropies
 
-    def update_policy_pretrain(self, log_probs, rewards, entropies, gamma=0.99, entropy_coef = 0.05):
+    def update_policy_pretrain(self, log_probs, rewards, entropies, gamma=0.99, entropy_coef = 0.1):
         G = 0
         returns = []
         for r in reversed(rewards):
@@ -72,7 +75,7 @@ class AdaptiveAgent:
         returns = torch.FloatTensor(returns)
         returns = (returns - returns.mean()) / (returns.std() + 1e-8)
         policy_loss = []
-        entropy_loss = [-e for e in entropies]
+        entropy_loss = [e for e in entropies]
 
         for log_prob, G_t in zip(log_probs, returns):
             policy_loss.append(-log_prob * G_t)
@@ -90,7 +93,7 @@ class AdaptiveAgent:
         self.ks.update(topic, score, difficulty, question_type)
         return self.mdp.compute_reward(self.ks, topic, score, prev_score)
 
-    def pretrain(self, n_episodes=500, n_questions=100, gamma=0.99):
+    def pretrain(self, n_episodes=3000, n_questions=100, gamma=0.99):
         total_losses = []
 
         for episode in range(n_episodes):

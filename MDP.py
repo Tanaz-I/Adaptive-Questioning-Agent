@@ -25,6 +25,8 @@ class MDP:
     def compute_reward(self, ks, topic, score, prev_score):
         #ks -> obj of KnowledgeState
         improvement = score - prev_score
+        if score < 0.3 and ks.attempts[topic] > 3:
+            improvement -= 0.2
         if ks.is_neglected(topic):
             coverage_bonus = 1.0
         elif ks.attempts[topic] < 5:
@@ -33,6 +35,8 @@ class MDP:
             coverage_bonus = 0.4
         else:
             coverage_bonus = 0.0
+        if ks.attempts[topic] > 5 and ks.topic_score[topic] < 0.2:
+            coverage_bonus = -0.5
         
         mastery_penalty = 1.0 if ks.is_mastered(topic) else 0.0
         return self.w1 * improvement + self.w2 * coverage_bonus - self.w3 * mastery_penalty

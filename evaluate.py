@@ -77,6 +77,8 @@ def run_agent_session(agent, simulator, topics, n_questions, is_rl=True):
             topic, diff, qtype  = agent.select_action()
 
         score = simulator.get_score(topic, diff, qtype)
+        if is_rl:
+            print(f"Step {step}: {topic} | {diff} | {qtype} | score: {score:.2f}")
         agent.update(topic, score, diff, qtype)
 
         score_progression.append(score)
@@ -132,7 +134,7 @@ def print_per_topic_report(topics, topics_difficulty,
 # Main evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=100, n_questions=100):
+def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=1, n_questions=500):
     """
     Compare RL agent vs rule-based baseline on n_students simulated students.
     Both agents face identical simulated students for fair comparison.
@@ -228,7 +230,7 @@ def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=100, n_questi
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('evaluation_plot.png', dpi=150)
+    plt.savefig('Images/evaluation_plot_1.png', dpi=150)
     plt.show()
 
     # 2. Per-topic mastery rate bar chart
@@ -244,10 +246,9 @@ def evaluate(topics_difficulty, w1=0.4, w2=0.5, w3=0.1, n_students=100, n_questi
     plt.title('Per-Topic Mastery Rate — RL Agent vs Baseline')
     plt.legend()
     plt.tight_layout()
-    plt.savefig('mastery_plot.png', dpi=150)
+    plt.savefig('Images/mastery_plot_1.png', dpi=150)
     plt.show()
 
-    print("\nPlots saved to evaluation_plot.png and mastery_plot.png")
 
 
 if __name__ == "__main__":
@@ -263,6 +264,6 @@ if __name__ == "__main__":
     evaluate(
         topics_difficulty,
         w1=0.6, w2=0.3, w3=0.1,
-        n_students=20,
-        n_questions=25
+        n_students=1,
+        n_questions=100
     )
