@@ -9,26 +9,34 @@ import matplotlib.pyplot as plt
 
 class AdaptiveAgent:
 
-    def __init__(self, topics_difficulty, w1, w2, w3, n_episodes=3000, n_questions=100):
+    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3, n_episodes=3000, n_questions=100):
         self.mdp = MDP(list(topics_difficulty.keys()), difficulty_types = ['basic', 'intermediate', 'advanced'], q_types = ['factual', 'inferential', 'evaluative'], w1 = w1, w2 = w2, w3 = w3)
         self.policy_network  = PolicyNetwork(num_topics = len(topics_difficulty), num_actions = len(topics_difficulty) * 3 * 3)
         self.simulator = Simulator(topic_difficulty = topics_difficulty)
-        self.ks = KnowledgeState(topics_difficulty = topics_difficulty, window_size = 10)
+        self.ks = KnowledgeState(topics_difficulty = topics_difficulty, prerequisites = prerequisites, window_size = 10)
         self.optimizer = torch.optim.AdamW( self.policy_network.parameters(), lr = 1e-4)
         self.pretrain(n_episodes =n_episodes, n_questions = n_questions)
 
-    def select_action(self, state_vector, training = False):
+    def _build_action_mask(self):
+        mask = torch.full((self.mdp.n_actions,), float('-inf'))
+        for idx in range(self.mdp.n_actions):
+            topic, diff, qtype = self.mdp.decode(idx)
+            if not self.ks.prerequisites_met(topic):
+                continue
+            valid = self.ks.get_valid_actions(topic)
+            if (diff, qtype) in valid:
+                mask[idx] = 0.0
+        return mask
+    
+    def select_action(self, state_vector, training=False):
         state  = torch.FloatTensor(state_vector)
         logits = self.policy_network(state)
-        if training:
-            probs  = F.softmax(logits, dim=-1)
-            dist   = torch.distributions.Categorical(probs)
-            action = dist.sample()
-        else:
-            temperature = 0.7  # < 1 = more focused, > 1 = more random
-            probs  = F.softmax(logits / temperature, dim=-1)
-            dist   = torch.distributions.Categorical(probs)
-            action = dist.sample()
+        mask   = self._build_action_mask()
+        logits = logits + mask
+        temperature = 1.0 if training else 0.7
+        probs  = F.softmax(logits / temperature, dim=-1)
+        dist   = torch.distributions.Categorical(probs)
+        action = dist.sample()
         return action.item(), dist.log_prob(action), dist.entropy()
 
     def run_episode(self, n_questions=25):
@@ -43,6 +51,8 @@ class AdaptiveAgent:
             self.ks.attempts[topic] = 0
             self.ks.recent_scores[topic].clear()
             self.ks.prev_qtype[topic] = (None, None)
+            self.ks.current_level[topic] = { 'diff_idx' : 0, 'qtype_idx' : 0, 'earned_diff_idx' : 0, 'earned_qtype_idx': 0}
+        self.ks.prev_topic = None
 
         log_probs = []
         rewards   = []
@@ -105,7 +115,13 @@ class AdaptiveAgent:
                 avg_loss   = np.mean(total_losses[-50:])
                 avg_reward = np.mean(rewards)
                 print(f"Episode {episode+1}/{n_episodes} | " f"Avg Loss: {avg_loss:.4f} | " f"Avg Reward: {avg_reward:.4f}")
-        plt.plot(np.arange(len(total_losses)), total_losses)
+        
+        window   = 50
+        smoothed = np.convolve(total_losses, np.ones(window)/window, mode='valid')
+        plt.plot(smoothed)
+        plt.title('Smoothed Training Loss')
+        plt.xlabel('Episode')
+        plt.ylabel('Loss')
         plt.show()
 
         return total_losses
