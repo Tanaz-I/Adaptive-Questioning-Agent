@@ -6,6 +6,7 @@ from MDP import MDP
 from policy_network import PolicyNetwork
 from Simulator import Simulator
 import matplotlib.pyplot as plt
+from collections import defaultdict, deque
 
 class AdaptiveAgent:
 
@@ -51,6 +52,7 @@ class AdaptiveAgent:
             self.ks.attempts[topic] = 0
             self.ks.recent_scores[topic].clear()
             self.ks.prev_qtype[topic] = (None, None)
+            self.ks.combo_scores[topic] = defaultdict(list)
             self.ks.current_level[topic] = { 'diff_idx' : 0, 'qtype_idx' : 0, 'earned_diff_idx' : 0, 'earned_qtype_idx': 0}
         self.ks.prev_topic = None
 
@@ -64,11 +66,14 @@ class AdaptiveAgent:
             entropies.append(entropy)
             topic, difficulty, question_type = self.mdp.decode(action_idx)
 
+            old_earned_diff  = self.ks.current_level[topic]['earned_diff_idx']
+            old_earned_qtype = self.ks.current_level[topic]['earned_qtype_idx']
+
             prev_score = self.ks.topic_score[topic]
             score = self.simulator.get_score(topic, difficulty, question_type)
             self.ks.update(topic, score, difficulty, question_type)
 
-            reward = self.mdp.compute_reward(self.ks, topic, score, prev_score)
+            reward = self.mdp.compute_reward(self.ks, topic, score, prev_score, old_earned_diff, old_earned_qtype)
 
             log_probs.append(log_prob)
             rewards.append(reward)
@@ -100,8 +105,10 @@ class AdaptiveAgent:
     
     def update(self, topic, score, difficulty, question_type):
         prev_score = self.ks.topic_score[topic]
+        old_earned_diff  = self.ks.current_level[topic]['earned_diff_idx']
+        old_earned_qtype = self.ks.current_level[topic]['earned_qtype_idx']
         self.ks.update(topic, score, difficulty, question_type)
-        return self.mdp.compute_reward(self.ks, topic, score, prev_score)
+        return self.mdp.compute_reward(self.ks, topic, score, prev_score, old_earned_diff, old_earned_qtype)
 
     def pretrain(self, n_episodes=3000, n_questions=100, gamma=0.99):
         total_losses = []

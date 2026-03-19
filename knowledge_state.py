@@ -14,10 +14,11 @@ class KnowledgeState:
         self.recent_scores = defaultdict(lambda: deque(maxlen=window_size))  
         self.attempts = defaultdict(int)
         self.prev_qtype = defaultdict(lambda: (None,None))
+        self.combo_scores = defaultdict(lambda: defaultdict(list))
         self.current_level = {topic: {'diff_idx': 0, 'qtype_idx': 0,'earned_diff_idx': 0, 'earned_qtype_idx': 0} for topic in self.topics }
         self.prev_topic = None
 
-        self.master_thresh = {'basic' : 0.90, 'intermediate' : 0.85, 'advanced':0.75}
+        self.master_thresh = {'basic' : 0.75, 'intermediate' : 0.65, 'advanced':0.55}
         self.ordinal_order_difficulty = {'basic' : 0.2, 'intermediate' : 0.6, 'advanced': 1}
         self.question_type_encoding = {'factual' : 0.2, 'inferential' : 0.6, 'evaluative': 1}
         self.diff_order    = {'basic' : 0, 'intermediate' : 1, 'advanced': 2}
@@ -26,9 +27,15 @@ class KnowledgeState:
 
     def prerequisites_met(self, topic):
         for prereq in self.prerequisites_topic.get(topic, []):
-            if not self.is_mastered(prereq):
+            if not self.is_sufficiently_understood(prereq):
                 return False
         return True
+    
+    def is_sufficiently_understood(self, topic):
+        topic_difficulty = self.topics_difficulty[topic]
+        sufficiency_thresh = {'basic' : 0.65, 'intermediate' : 0.55, 'advanced' : 0.45}
+        threshold = sufficiency_thresh[topic_difficulty]
+        return (self.attempts[topic] >= 5 and self.topic_score[topic] >= threshold and self.trend(topic) >= 0)
 
     def update(self, topic, score, difficulty,question_type):
         
@@ -37,7 +44,27 @@ class KnowledgeState:
         self.recent_scores[topic].append(score)       
         self.prev_qtype[topic] = (difficulty, question_type)
         self.prev_topic = topic
+        self.combo_scores[topic][(difficulty, question_type)].append(score)
         self.update_current_level(topic, difficulty, question_type)
+
+    def get_combo_threshold(self, topic, difficulty, question_type):
+        topic_base = self.master_thresh[self.topics_difficulty[topic]]
+        
+        # adjustment based on question difficulty
+        diff_adjustment = {
+            'basic'        :  0.10,   
+            'intermediate' :  0.05,
+            'advanced'     :  0.00    
+        }
+        
+        # adjustment based on question type
+        qtype_adjustment = {
+            'factual'     :  0.05,   
+            'inferential' :  0.02,
+            'evaluative'  :  0.00    
+        }
+        
+        return (topic_base + diff_adjustment[difficulty] + qtype_adjustment[question_type])
 
     def update_current_level(self, topic, difficulty, question_type):
         diff_idx  = self.diff_order[difficulty]
@@ -80,11 +107,31 @@ class KnowledgeState:
         slope = float(np.polyfit(x, recent, 1)[0])
         return float(np.clip(slope, -1.0, 1.0))
 
-    def is_mastered(self, topic,min_attempts= 3):
+    def is_mastered(self, topic, min_attempts=3):
         topic_difficulty = self.topics_difficulty[topic]
-        threshold = self.master_thresh[topic_difficulty]
-        trend_eval = self.trend(topic)
-        return (self.attempts[topic] >= min_attempts and self.topic_score[topic] >= threshold and trend_eval >= 0)
+        threshold        = self.master_thresh[topic_difficulty]
+        trend_eval       = self.trend(topic)
+
+        if self.attempts[topic] < min_attempts or trend_eval < 0:
+            return False
+
+        all_combos = {
+            (d, q)
+            for d in difficulty_level
+            for q in question_types
+        }
+
+        
+        for combo in all_combos:
+            diff, qtype = combo
+            scores = self.combo_scores[topic][combo]
+            if not scores:                          
+                return False
+            threshold = self.get_combo_threshold(topic, diff, qtype)
+            if np.mean(scores) < threshold:         
+                return False
+
+        return True
 
     def is_neglected(self, topic):
         return self.attempts[topic] == 0
