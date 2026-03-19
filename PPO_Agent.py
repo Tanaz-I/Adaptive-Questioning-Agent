@@ -12,12 +12,12 @@ from actor_critic_network import ActorCriticNetwork
 
 class PPOAgent:
     
-    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3, n_episodes= 3000, n_questions= 100, lr= 3e-4, gamma= 0.99,
+    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3, n_episodes= 3000, n_questions= 100, gamma= 0.99,
         lam= 0.95,       
         clip_eps= 0.2,       
         ppo_epochs= 4,          
         mini_batch= 64,
-        entropy_coef = 0.01,
+        entropy_coef = 0.08,
         value_coef = 0.5,
     ):
         self.gamma       = gamma
