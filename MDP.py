@@ -29,12 +29,12 @@ class MDP:
             improvement -= 0.2
         if ks.is_neglected(topic):
             coverage_bonus = 1.0
+        elif ks.attempts[topic] > 5 and ks.topic_score[topic] < 0.2:  # ← move here
+            coverage_bonus = -0.5
         elif ks.attempts[topic] < 5:
             coverage_bonus = 0.7
         elif ks.trend(topic) < 0:
             coverage_bonus = 0.4
-        if ks.attempts[topic] > 5 and ks.topic_score[topic] < 0.2:
-            coverage_bonus = -0.5
         else:
             coverage_bonus = 0.0
         
