@@ -4,7 +4,7 @@ from collections import defaultdict
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from Agent import AdaptiveAgent
+from PPO_Agent import PPOAgent
 
 
 class RuleBasedAgent:
@@ -79,7 +79,7 @@ def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student
     for step in range(n_questions):
         if is_rl:
             state_vector        = agent.ks.get_state_vector()
-            action_idx, _ , _     = agent.select_action(state_vector, training=False)
+            action_idx, _ , _ ,_   = agent.select_action(state_vector, training=False)
             topic, diff, qtype  = agent.mdp.decode(action_idx)
         else:
             topic, diff, qtype  = agent.select_action()
@@ -158,7 +158,7 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     simulator = Simulator(topic_difficulty=topics_difficulty)
 
     print("Pretraining RL agent...")
-    rl_agent       = AdaptiveAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
+    rl_agent       = PPOAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
     baseline_agent = RuleBasedAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
     print("Pretraining done.\n")
 
