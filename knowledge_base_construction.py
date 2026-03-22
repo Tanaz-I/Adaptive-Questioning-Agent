@@ -1,388 +1,425 @@
 """
-PPTX RAG Pipeline
-=================
-Reads all .pptx files from a directory, extracts content slide-by-slide,
-chunks and vectorizes the text, and stores it in a ChromaDB vector database
-for use in a Retrieval-Augmented Generation (RAG) pipeline.
+Generalized Knowledge Base Construction
+
+Reads all supported files from a directory, extracts text,
+chunks it, vectorizes, and stores in ChromaDB for RAG.
+
+Supported formats:
+    .pptx / .ppt   — Presentation slides   (python-pptx + markitdown)
+    .pdf           — PDF documents         (pdfplumber)
+    .docx / .doc   — Word documents        (python-docx)
+    .txt           — Plain text files
 
 Dependencies:
-    pip install markitdown[pptx] python-pptx chromadb sentence-transformers tqdm
+    pip install python-pptx markitdown[pptx] pdfplumber python-docx \
+                chromadb sentence-transformers tqdm
+    sudo apt install libreoffice -y   # for .ppt and .doc conversion
+
+Usage:
+    python knowledge_base_construction.py
 """
 
-import os
 import re
-import json
 import hashlib
+import subprocess
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
-from typing import Optional
+from dataclasses import dataclass
 
+import pdfplumber
 from pptx import Presentation
-from markitdown import MarkItDown
+from docx import Document as DocxDocument
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 
-# ─────────────────────────────────────────────
 # Configuration
-# ─────────────────────────────────────────────
 
-PPTX_DIR        = "./presentations"          # Directory containing .pptx files
-CHROMA_DB_DIR   = "./chroma_db"              # Persistent ChromaDB storage path
-COLLECTION_NAME = "pptx_rag"                 # ChromaDB collection name
-EMBED_MODEL     = "all-MiniLM-L6-v2"        # Sentence-Transformers model
-CHUNK_SIZE      = 500                        # Max characters per chunk
-CHUNK_OVERLAP   = 80                         # Overlap between consecutive chunks
+DOCS_DIR        = "./contents"       # Root directory with all source files
+CHROMA_DB_DIR   = "./chroma_db"
+COLLECTION_NAME = "rag_kb"
+EMBED_MODEL     = "all-MiniLM-L6-v2"
+
+CHUNK_SIZE      = 500                 # Max characters per chunk
+CHUNK_OVERLAP   = 80                  # Overlap between chunks
+
+# Supported extensions
+SUPPORTED_EXTS  = {".pptx", ".ppt", ".docx", ".doc", ".pdf", ".txt"}
 
 
-# ─────────────────────────────────────────────
 # Data model
-# ─────────────────────────────────────────────
 
 @dataclass
-class SlideChunk:
-    """A single text chunk extracted from one slide."""
-    doc_id:        str            # Unique ID for this chunk
-    text:          str            # The chunk text
-    file_name:     str            # Source .pptx filename
-    file_path:     str            # Absolute path to source file
-    slide_number:  int            # 1-based slide index
-    slide_title:   str            # Title of the slide (if present)
-    chunk_index:   int            # Index of this chunk within the slide
-    total_chunks:  int            # Total chunks from this slide
-    speaker_notes: str = ""       # Speaker notes from the slide
-    extra_metadata: dict = field(default_factory=dict)
+class Chunk:
+    doc_id:       str           # Unique MD5 ID
+    text:         str           # Chunk text
+    file_name:    str           # Source filename
+    file_path:    str           # Absolute path
+    file_type:    str           # pptx / pdf / docx / txt
+    page_number:  int           # Page/slide number (1-based); 0 if N/A
+    section:      str           # Section/heading/slide title if available
+    chunk_index:  int           # Index within the page/section
+    total_chunks: int           # Total chunks from this page/section
 
 
-# ─────────────────────────────────────────────
-# PPTX Extraction
-# ─────────────────────────────────────────────
+# Legacy format conversion (.ppt / .doc → modern)
 
-def _slide_title(slide) -> str:
-    """Return the title placeholder text, or an empty string."""
-    if slide.shapes.title and slide.shapes.title.has_text_frame:
-        return slide.shapes.title.text_frame.text.strip()
-    return ""
-
-
-def _slide_body_text(slide) -> str:
-    """
-    Concatenate all text from non-title placeholders and free text boxes.
-    Uses python-pptx for structured extraction (preserves bullet hierarchy).
-    """
-    lines = []
-    title_shape = slide.shapes.title
-    for shape in slide.shapes:
-        if shape == title_shape:
-            continue
-        if shape.has_text_frame:
-            for para in shape.text_frame.paragraphs:
-                text = para.text.strip()
-                if text:
-                    level = para.level  # indent level (0 = top)
-                    indent = "  " * level
-                    lines.append(f"{indent}{text}")
-    return "\n".join(lines)
+def convert_legacy_files(docs_dir: str):
+    """Convert old .ppt/.doc to .pptx/.docx using LibreOffice."""
+    converted = 0
+    for ext, target_ext in [(".ppt", "pptx"), (".doc", "docx")]:
+        for path in Path(docs_dir).rglob(f"*{ext}"):
+            target = path.with_suffix(f".{target_ext}")
+            if target.exists():
+                continue  # skip if already done
+            print(f"Converting: {path.name} -> {target.name}")
+            try:
+                subprocess.run(
+                    ["libreoffice", "--headless", "--convert-to", target_ext,
+                     "--outdir", str(path.parent), str(path)],
+                    check=True,
+                    capture_output=True,
+                )
+                converted += 1
+            except FileNotFoundError:
+                print("  [ERROR] LibreOffice not found. Install with:")
+                print("          sudo apt install libreoffice -y")
+                raise SystemExit(1)
+            except subprocess.CalledProcessError as e:
+                print(f"  [WARN] Conversion failed for {path.name}: {e}")
+    if converted:
+        print(f"  Converted {converted} legacy file(s).\n")
 
 
-def _slide_notes(slide) -> str:
-    """Extract speaker notes."""
-    try:
-        notes_slide = slide.notes_slide
-        tf = notes_slide.notes_text_frame
-        return tf.text.strip() if tf else ""
-    except Exception:
-        return ""
+# Text extraction — per format
 
-
-def extract_slides(pptx_path: Path) -> list[dict]:
-    """
-    Parse a .pptx file and return a list of slide dicts:
-        {slide_number, title, body, notes, markdown}
-    """
-    prs = Presentation(str(pptx_path))
-    md_converter = MarkItDown()
-
-    # Full-file markdown as a fallback / supplement
-    full_md = md_converter.convert(str(pptx_path)).text_content
-
+def _extract_pptx(path: Path) -> list[dict]:
+    """Extract per-slide content from a .pptx file."""
+    prs = Presentation(str(path))
     slides = []
     for idx, slide in enumerate(prs.slides, start=1):
-        title  = _slide_title(slide)
-        body   = _slide_body_text(slide)
-        notes  = _slide_notes(slide)
+        # Title
+        title = ""
+        if slide.shapes.title and slide.shapes.title.has_text_frame:
+            title = slide.shapes.title.text_frame.text.strip()
+
+        # Body
+        lines = []
+        for shape in slide.shapes:
+            if shape == slide.shapes.title:
+                continue
+            if shape.has_text_frame:
+                for para in shape.text_frame.paragraphs:
+                    t = para.text.strip()
+                    if t:
+                        lines.append("  " * para.level + t)
+        body = "\n".join(lines)
+
+        # Speaker notes
+        notes = ""
+        try:
+            tf = slide.notes_slide.notes_text_frame
+            notes = tf.text.strip() if tf else ""
+        except Exception:
+            pass
+
+        parts = []
+        if title:
+            parts.append(f"Title: {title}")
+        if body:
+            parts.append(body)
+        if notes:
+            parts.append(f"Speaker Notes: {notes}")
 
         slides.append({
-            "slide_number": idx,
-            "title":        title,
-            "body":         body,
-            "notes":        notes,
+            "page_number": idx,
+            "section":     title,
+            "text":        "\n\n".join(parts).strip(),
         })
-
     return slides
 
 
-# ─────────────────────────────────────────────
-# Chunking
-# ─────────────────────────────────────────────
+def _extract_pdf(path: Path) -> list[dict]:
+    """Extract per-page content from a PDF using pdfplumber."""
+    pages = []
+    with pdfplumber.open(str(path)) as pdf:
+        for idx, page in enumerate(pdf.pages, start=1):
+            text = page.extract_text() or ""
 
-def _chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+            # Also extract tables as pipe-separated text
+            tables = page.extract_tables()
+            table_text = ""
+            for table in tables:
+                for row in table:
+                    cleaned = [cell.strip() if cell else "" for cell in row]
+                    table_text += " | ".join(cleaned) + "\n"
+
+            combined = "\n\n".join(filter(None, [text.strip(), table_text.strip()]))
+            pages.append({
+                "page_number": idx,
+                "section":     f"Page {idx}",
+                "text":        combined.strip(),
+            })
+    return pages
+
+
+def _extract_docx(path: Path) -> list[dict]:
     """
-    Split `text` into overlapping fixed-size character chunks.
-    Tries to break on sentence boundaries first.
+    Extract content from a .docx file.
+    Splits on Heading styles into logical sections.
+    Falls back to fixed-size paragraph groups if no headings found.
     """
+    doc      = DocxDocument(str(path))
+    sections = []
+    current_heading = "Introduction"
+    current_paras   = []
+
+    for para in doc.paragraphs:
+        text = para.text.strip()
+        if not text:
+            continue
+
+        style = para.style.name if para.style else ""
+        is_heading = style.startswith("Heading") or style.startswith("Title")
+
+        if is_heading:
+            if current_paras:
+                sections.append({
+                    "page_number": len(sections) + 1,
+                    "section":     current_heading,
+                    "text":        "\n".join(current_paras),
+                })
+            current_heading = text
+            current_paras   = []
+        else:
+            current_paras.append(text)
+
+    # Flush last section
+    if current_paras:
+        sections.append({
+            "page_number": len(sections) + 1,
+            "section":     current_heading,
+            "text":        "\n".join(current_paras),
+        })
+
+    # if no headings, treat as one big section
+    if not sections:
+        full_text = "\n".join(
+            p.text.strip() for p in doc.paragraphs if p.text.strip()
+        )
+        sections = [{"page_number": 1, "section": path.stem, "text": full_text}]
+
+    return sections
+
+
+def _extract_txt(path: Path) -> list[dict]:
+    """
+    Extract content from a plain .txt file.
+    Splits on blank lines into paragraphs, groups into logical sections.
+    """
+    raw = path.read_text(encoding="utf-8", errors="ignore")
+
+    # Split on double newlines (paragraph boundaries)
+    paragraphs = [p.strip() for p in re.split(r"\n{2,}", raw) if p.strip()]
+
+    # Group paragraphs into chunks of ~5 per section
+    GROUP_SIZE = 5
+    sections   = []
+    for i in range(0, len(paragraphs), GROUP_SIZE):
+        group = paragraphs[i : i + GROUP_SIZE]
+        sections.append({
+            "page_number": (i // GROUP_SIZE) + 1,
+            "section":     f"Section {(i // GROUP_SIZE) + 1}",
+            "text":        "\n\n".join(group),
+        })
+
+    if not sections:
+        sections = [{"page_number": 1, "section": path.stem, "text": raw.strip()}]
+
+    return sections
+
+
+def extract_content(path: Path) -> list[dict]:
+    """Dispatch to the correct extractor based on file extension."""
+    ext = path.suffix.lower()
+    try:
+        if ext == ".pptx":
+            return _extract_pptx(path)
+        elif ext == ".pdf":
+            return _extract_pdf(path)
+        elif ext == ".docx":
+            return _extract_docx(path)
+        elif ext == ".txt":
+            return _extract_txt(path)
+        else:
+            print(f"  [WARN] Unsupported format skipped: {path.name}")
+            return []
+    except Exception as e:
+        print(f"  [WARN] Failed to extract {path.name}: {e}")
+        return []
+
+
+# Chunking
+
+def _split_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+    """Split text into overlapping chunks, preferring sentence boundaries."""
     if not text or len(text) <= size:
         return [text] if text.strip() else []
 
-    # Split on sentence endings
     sentences = re.split(r'(?<=[.!?])\s+', text)
-    chunks = []
-    current = ""
+    chunks, current = [], ""
 
-    for sentence in sentences:
-        if len(current) + len(sentence) + 1 <= size:
-            current = (current + " " + sentence).strip()
+    for sent in sentences:
+        if len(current) + len(sent) + 1 <= size:
+            current = (current + " " + sent).strip()
         else:
             if current:
                 chunks.append(current)
-            # If a single sentence exceeds size, hard-split it
-            while len(sentence) > size:
-                chunks.append(sentence[:size])
-                sentence = sentence[size - overlap:]
-            current = sentence
+            while len(sent) > size:
+                chunks.append(sent[:size])
+                sent = sent[size - overlap:]
+            current = sent
 
     if current:
         chunks.append(current)
-
     return chunks
 
 
-def slide_to_chunks(slide: dict, file_name: str, file_path: str) -> list[SlideChunk]:
-    """Convert a single slide dict into one or more SlideChunk objects."""
-    # Compose the full text for this slide
-    parts = []
-    if slide["title"]:
-        parts.append(f"Title: {slide['title']}")
-    if slide["body"]:
-        parts.append(slide["body"])
-    if slide["notes"]:
-        parts.append(f"Speaker Notes: {slide['notes']}")
+def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: str) -> list[Chunk]:
+    """Convert one extracted section/page/slide into Chunk objects."""
+    raw_chunks = _split_text(section["text"])
+    total      = len(raw_chunks)
+    result     = []
 
-    full_text = "\n\n".join(parts).strip()
-    raw_chunks = _chunk_text(full_text)
+    for idx, text in enumerate(raw_chunks):
+        uid = hashlib.md5(
+            f"{file_path}::p{section['page_number']}::c{idx}".encode()
+        ).hexdigest()
 
-    result = []
-    for chunk_idx, chunk_text in enumerate(raw_chunks):
-        # Build a stable, deterministic ID
-        unique_str = f"{file_path}::slide{slide['slide_number']}::chunk{chunk_idx}"
-        doc_id = hashlib.md5(unique_str.encode()).hexdigest()
-
-        result.append(SlideChunk(
-            doc_id        = doc_id,
-            text          = chunk_text,
-            file_name     = file_name,
-            file_path     = file_path,
-            slide_number  = slide["slide_number"],
-            slide_title   = slide["title"],
-            chunk_index   = chunk_idx,
-            total_chunks  = len(raw_chunks),
-            speaker_notes = slide["notes"],
+        result.append(Chunk(
+            doc_id      = uid,
+            text        = text,
+            file_name   = file_name,
+            file_path   = file_path,
+            file_type   = file_type,
+            page_number = section["page_number"],
+            section     = section["section"],
+            chunk_index = idx,
+            total_chunks= total,
         ))
-
     return result
 
 
-# ─────────────────────────────────────────────
 # Vector DB (ChromaDB)
-# ─────────────────────────────────────────────
 
-def build_vector_db(
-    chunks:          list[SlideChunk],
-    embed_model:     str = EMBED_MODEL,
-    chroma_dir:      str = CHROMA_DB_DIR,
-    collection_name: str = COLLECTION_NAME,
-) -> chromadb.Collection:
-    """
-    Embed all chunks and upsert them into a persistent ChromaDB collection.
-    Returns the collection object.
-    """
-    print(f"\n[VectorDB] Loading embedding model: {embed_model}")
-    model = SentenceTransformer(embed_model)
+def store_in_vector_db(chunks: list[Chunk]) -> chromadb.Collection:
+    """Embed all chunks and upsert into ChromaDB."""
+    print(f"\n[VectorDB] Loading embedding model: {EMBED_MODEL}")
+    model = SentenceTransformer(EMBED_MODEL)
 
-    print(f"[VectorDB] Embedding {len(chunks)} chunks …")
-    texts = [c.text for c in chunks]
+    print(f"[VectorDB] Embedding {len(chunks)} chunks ...")
+    texts      = [c.text for c in chunks]
     embeddings = model.encode(texts, show_progress_bar=True, batch_size=64)
 
-    # Initialise persistent ChromaDB
     client = chromadb.PersistentClient(
-        path=chroma_dir,
+        path=CHROMA_DB_DIR,
         settings=Settings(anonymized_telemetry=False),
     )
     collection = client.get_or_create_collection(
-        name=collection_name,
+        name=COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"},
     )
 
-    # Upsert in batches of 500 (ChromaDB hard limit)
     BATCH = 500
-    print(f"[VectorDB] Upserting into collection '{collection_name}' …")
+    print(f"[VectorDB] Upserting into '{COLLECTION_NAME}' ...")
     for i in tqdm(range(0, len(chunks), BATCH), desc="Batches"):
         batch = chunks[i : i + BATCH]
         collection.upsert(
-            ids        = [c.doc_id for c in batch],
-            documents  = [c.text   for c in batch],
+            ids        = [c.doc_id      for c in batch],
+            documents  = [c.text        for c in batch],
             embeddings = embeddings[i : i + BATCH].tolist(),
             metadatas  = [
                 {
                     "file_name":    c.file_name,
                     "file_path":    c.file_path,
-                    "slide_number": c.slide_number,
-                    "slide_title":  c.slide_title,
+                    "file_type":    c.file_type,
+                    "page_number":  c.page_number,
+                    "section":      c.section,
                     "chunk_index":  c.chunk_index,
                     "total_chunks": c.total_chunks,
-                    "speaker_notes": c.speaker_notes[:500],   # truncate for metadata limit
                 }
                 for c in batch
             ],
         )
 
-    print(f"[VectorDB] ✓ {collection.count()} total documents in collection.")
+    print(f"[VectorDB] {collection.count()} total documents in collection.\n")
     return collection
 
 
-# ─────────────────────────────────────────────
-# RAG Query helper
-# ─────────────────────────────────────────────
+# Main pipeline
 
-def query_rag(
-    query:           str,
-    collection:      chromadb.Collection,
-    embed_model:     str  = EMBED_MODEL,
-    top_k:           int  = 5,
-) -> list[dict]:
-    """
-    Embed a query and retrieve the top-k most relevant chunks.
+def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
+    print(f"\n{'='*58}")
+    print(f"  Generalized Knowledge Base Construction")
+    print(f"{'='*58}")
+    print(f"  Source dir : {docs_dir}")
+    print(f"  Formats    : {', '.join(sorted(SUPPORTED_EXTS))}")
+    print(f"  ChromaDB   : {CHROMA_DB_DIR}")
+    print(f"  Collection : {COLLECTION_NAME}")
+    print(f"{'='*58}\n")
 
-    Returns a list of dicts with keys:
-        text, score, file_name, slide_number, slide_title, chunk_index
-    """
-    model = SentenceTransformer(embed_model)
-    query_embedding = model.encode([query])[0].tolist()
+    # Step 1 — convert legacy formats
+    print("[Step 1] Converting legacy .ppt / .doc files ...")
+    convert_legacy_files(docs_dir)
 
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=top_k,
-        include=["documents", "metadatas", "distances"],
+    # Step 2 — discover all supported files
+    all_files = sorted(
+        p for p in Path(docs_dir).rglob("*")
+        if p.suffix.lower() in SUPPORTED_EXTS and p.is_file()
     )
 
-    hits = []
-    for doc, meta, dist in zip(
-        results["documents"][0],
-        results["metadatas"][0],
-        results["distances"][0],
-    ):
-        hits.append({
-            "text":         doc,
-            "score":        round(1 - dist, 4),   # cosine similarity
-            "file_name":    meta["file_name"],
-            "slide_number": meta["slide_number"],
-            "slide_title":  meta["slide_title"],
-            "chunk_index":  meta["chunk_index"],
-        })
+    if not all_files:
+        raise FileNotFoundError(f"No supported files found in: {docs_dir}")
 
-    return hits
+    # Summary by type
+    from collections import Counter
+    type_counts = Counter(p.suffix.lower() for p in all_files)
+    print(f"[Step 2] Found {len(all_files)} file(s):")
+    for ext, count in sorted(type_counts.items()):
+        print(f"         {ext:6s}  →  {count} file(s)")
+    print()
 
-
-# ─────────────────────────────────────────────
-# Main pipeline
-# ─────────────────────────────────────────────
-
-def run_pipeline(
-    pptx_dir:        str = PPTX_DIR,
-    chroma_dir:      str = CHROMA_DB_DIR,
-    collection_name: str = COLLECTION_NAME,
-    embed_model:     str = EMBED_MODEL,
-) -> chromadb.Collection:
-    """
-    End-to-end pipeline:
-        1. Discover all .pptx files in `pptx_dir`
-        2. Extract & chunk slide content
-        3. Embed and store in ChromaDB
-        4. Return the live collection for querying
-    """
-    import subprocess
-
-    for ppt in Path(pptx_dir).glob("**/*.ppt"):
-        subprocess.run([
-            "libreoffice", "--headless", "--convert-to", "pptx",
-            "--outdir", str(ppt.parent), str(ppt)
-        ])
-
-    pptx_files = sorted(Path(pptx_dir).glob("**/*.pptx"))
-    if not pptx_files:
-        raise FileNotFoundError(f"No .pptx files found in: {pptx_dir}")
-
-    print(f"\n{'='*55}")
-    print(f"  PPTX RAG Pipeline")
-    print(f"{'='*55}")
-    print(f"  Source dir : {pptx_dir}")
-    print(f"  Found      : {len(pptx_files)} file(s)")
-    print(f"  ChromaDB   : {chroma_dir}")
-    print(f"  Collection : {collection_name}")
-    print(f"  Embed model: {embed_model}")
-    print(f"{'='*55}\n")
-
-    all_chunks: list[SlideChunk] = []
-
-    for pptx_path in tqdm(pptx_files, desc="Parsing files"):
-        print(f"\n  → {pptx_path.name}")
-        try:
-            slides = extract_slides(pptx_path)
-            file_chunks = []
-            for slide in slides:
-                file_chunks.extend(
-                    slide_to_chunks(slide, pptx_path.name, str(pptx_path.resolve()))
-                )
-            print(f"     {len(slides)} slides  |  {len(file_chunks)} chunks")
-            all_chunks.extend(file_chunks)
-        except Exception as exc:
-            print(f"     [WARN] Skipping {pptx_path.name}: {exc}")
+    # Step 3 — extract + chunk
+    all_chunks: list[Chunk] = []
+    print("[Step 3] Extracting and chunking ...")
+    for path in tqdm(all_files, desc="Files"):
+        file_type = path.suffix.lower().lstrip(".")
+        sections  = extract_content(path)
+        file_chunks = []
+        for section in sections:
+            if not section["text"].strip():
+                continue
+            file_chunks.extend(
+                section_to_chunks(section, path.name, str(path.resolve()), file_type)
+            )
+        tqdm.write(
+            f"  {path.name:45s}  {len(sections):4d} sections  →  {len(file_chunks):4d} chunks"
+        )
+        all_chunks.extend(file_chunks)
 
     if not all_chunks:
-        raise ValueError("No chunks were extracted. Check your .pptx files.")
+        raise ValueError("No text could be extracted from any file.")
 
-    print(f"\n[Pipeline] Total chunks across all files: {len(all_chunks)}")
+    print(f"\n[Step 3] Total chunks: {len(all_chunks)}\n")
 
-    collection = build_vector_db(
-        chunks          = all_chunks,
-        embed_model     = embed_model,
-        chroma_dir      = chroma_dir,
-        collection_name = collection_name,
-    )
+    # Step 4 — embed + store
+    print("[Step 4] Vectorizing and storing in ChromaDB ...")
+    collection = store_in_vector_db(all_chunks)
 
-    print("\n[Pipeline] ✓ Done. Vector DB is ready for queries.\n")
+    print(" Knowledge base is ready.\n")
     return collection
 
 
-# ─────────────────────────────────────────────
-# Entry point / demo
-# ─────────────────────────────────────────────
-
 if __name__ == "__main__":
-    # ── 1. Run the ingestion pipeline ───────────────────────────────────────
-    collection = run_pipeline()
-
-    # ── 2. Demo: run a sample query ─────────────────────────────────────────
-    sample_query = "What are the key conclusions from the presentation?"
-    print(f"[Query] '{sample_query}'\n")
-
-    hits = query_rag(sample_query, collection, top_k=3)
-    for rank, hit in enumerate(hits, 1):
-        print(f"  Rank {rank}  |  score={hit['score']}  |  "
-              f"{hit['file_name']}  Slide {hit['slide_number']}  "
-              f"(chunk {hit['chunk_index']})")
-        print(f"  Title : {hit['slide_title'] or '—'}")
-        print(f"  Text  : {hit['text'][:200]}{'…' if len(hit['text']) > 200 else ''}")
-        print()
+    run_pipeline()
