@@ -5,13 +5,13 @@ Reads all supported files from a directory, extracts text,
 chunks it, vectorizes, and stores in ChromaDB for RAG.
 
 Supported formats:
-    .pptx / .ppt   — Presentation slides   (python-pptx + markitdown)
+    .pptx / .ppt   — Presentation slides   (python-pptx)
     .pdf           — PDF documents         (pdfplumber)
     .docx / .doc   — Word documents        (python-docx)
     .txt           — Plain text files
 
 Dependencies:
-    pip install python-pptx markitdown[pptx] pdfplumber python-docx \
+    pip install python-pptx pdfplumber python-docx \
                 chromadb sentence-transformers tqdm
     sudo apt install libreoffice -y   # for .ppt and .doc conversion
 
@@ -109,6 +109,17 @@ def _extract_pptx(path: Path) -> list[dict]:
         for shape in slide.shapes:
             if shape == slide.shapes.title:
                 continue
+
+            if shape.has_table:
+                for row in shape.table.rows:
+                    cells = [cell.text_frame.text.strip()
+                             for cell in row.cells
+                             if cell.text_frame.text.strip()]
+                    if cells:
+                        lines.append(" | ".join(cells))
+                lines.append("")   # blank line after table
+                continue
+
             if shape.has_text_frame:
                 for para in shape.text_frame.paragraphs:
                     t = para.text.strip()
@@ -163,6 +174,22 @@ def _extract_pdf(path: Path) -> list[dict]:
             })
     return pages
 
+def _extract_docx_tables(doc) -> str:
+    """Extract all tables from a docx as readable text."""
+    table_texts = []
+    for table in doc.tables:
+        rows = []
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells]
+            # Remove duplicate cells (merged cells repeat in python-docx)
+            seen, unique = set(), []
+            for c in cells:
+                if c not in seen:
+                    seen.add(c)
+                    unique.append(c)
+            rows.append(" | ".join(unique))
+        table_texts.append("\n".join(rows))
+    return "\n\n[TABLE]\n" + "\n\n[TABLE]\n".join(table_texts) if table_texts else ""
 
 def _extract_docx(path: Path) -> list[dict]:
     """
@@ -197,10 +224,11 @@ def _extract_docx(path: Path) -> list[dict]:
 
     # Flush last section
     if current_paras:
+        table_text = _extract_docx_tables(doc) if not sections else ""
         sections.append({
             "page_number": len(sections) + 1,
             "section":     current_heading,
-            "text":        "\n".join(current_paras),
+            "text":        "\n".join(current_paras) + table_text,
         })
 
     # if no headings, treat as one big section
@@ -208,6 +236,7 @@ def _extract_docx(path: Path) -> list[dict]:
         full_text = "\n".join(
             p.text.strip() for p in doc.paragraphs if p.text.strip()
         )
+        full_text += _extract_docx_tables(doc)
         sections = [{"page_number": 1, "section": path.stem, "text": full_text}]
 
     return sections
