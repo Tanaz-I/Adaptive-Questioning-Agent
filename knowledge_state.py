@@ -32,7 +32,7 @@ class KnowledgeState:
             return 0.0
         x = np.arange(len(recent), dtype=np.float32)
         slope = float(np.polyfit(x, recent, 1)[0])
-        return slope
+        return float(np.clip(slope, -1.0, 1.0))
 
     def is_mastered(self, topic,min_attempts= 3):
         topic_difficulty = self.topics_difficulty[topic]

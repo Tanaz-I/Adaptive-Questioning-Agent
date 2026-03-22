@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class PolicyNetwork(nn.Module):
-    def __init__(self, num_topics, num_actions, hidden_size1=64, hidden_size2=32, dropout=0.2):
+    def __init__(self, num_topics, num_actions, hidden_size1=128, hidden_size2=64, dropout=0.2):
         super(PolicyNetwork, self).__init__()
         self.input_size  = num_topics * 7 
         self.fc1         = nn.Linear(self.input_size, hidden_size1)

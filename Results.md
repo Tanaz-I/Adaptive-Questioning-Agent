@@ -1,0 +1,28 @@
+## Results for REINFORCE with regularization : 
+- ## Policy network
+    ```python 
+    self.input_size  = num_topics * 7 
+    self.fc1         = nn.Linear(self.input_size, hidden_size1)
+    self.fc2         = nn.Linear(hidden_size1, hidden_size2)
+    self.fc3         = nn.Linear(hidden_size2, num_actions)
+    self.dropout     = nn.Dropout(dropout)
+    ```
+-  ## Reward_weights</b> </h3>
+    weight_improvement = 0.4, weight_coverage_penalty = 0.5, weight_mastery_penalty = 0.1
+
+- ## Results:
+    ## Attempt 1:
+    ![Score_plot_attempt 1 ](Images/evaluation_plot_1.png)
+    ![Mastery_plot_attempt 1 ](Images/mastery_plot_1.png)
+
+    ## Attempt 2:
+    ![Score_plot_attempt 2 ](Images/evaluation_plot_2.png)
+    ![Mastery_plot_attempt 2 ](Images/mastery_plot_2.png)
+
+    ## Attempt 3:
+    ![Score_plot_attempt 3 ](Images/evaluation_plot_3.png)
+    ![Mastery_plot_attempt 3 ](Images/mastery_plot_3.png)
+
+    ## Summary 
+    Avg Topics Mastered:  Baseline 2.60  vs  RL 3.20  (+23%)
+    Avg Final Score:      Baseline 0.820 vs  RL 0.851  (+3.8%)
