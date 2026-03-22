@@ -32,6 +32,12 @@ import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
+from sklearn.metrics.pairwise import cosine_similarity
+
+import nltk
+nltk.download("punkt")
+nltk.download("punkt_tab")
+from nltk.tokenize import sent_tokenize
 
 
 # Configuration
@@ -41,8 +47,11 @@ CHROMA_DB_DIR   = "./chroma_db"
 COLLECTION_NAME = "rag_kb"
 EMBED_MODEL     = "all-MiniLM-L6-v2"
 
-CHUNK_SIZE      = 500                 # Max characters per chunk
-CHUNK_OVERLAP   = 80                  # Overlap between chunks
+CHUNK_SIZE              = 500                 # Max characters per chunk
+CHUNK_OVERLAP           = 80                  # Overlap between chunks
+CHUNKING_STRATEGY       = "semantic"          # semantic or sentence
+
+SEMANTIC_SIM_THRESHOLD  = 0.4
 
 # Supported extensions
 SUPPORTED_EXTS  = {".pptx", ".ppt", ".docx", ".doc", ".pdf", ".txt"}
@@ -63,7 +72,7 @@ class Chunk:
     total_chunks: int           # Total chunks from this page/section
 
 
-# Legacy format conversion (.ppt / .doc → modern)
+# Legacy format conversion (.ppt / .doc -> modern)
 
 def convert_legacy_files(docs_dir: str):
     """Convert old .ppt/.doc to .pptx/.docx using LibreOffice."""
@@ -292,7 +301,71 @@ def extract_content(path: Path) -> list[dict]:
 # Chunking
 
 def _split_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+    """Split text into overlapping chunks by semantic, sentence-aware chunking."""
+
+    if not text or len(text) <= size:
+        return [text.strip()] if text.strip() else []
+
+    sentences = sent_tokenize(text)
+    chunks, current  = [], ""
+
+    for sent in sentences:
+        if len(current) + len(sent) + 1 <= size:
+            current = (current + " " + sent).strip()
+        else:
+            if current:
+                chunks.append(current)
+            overlap_text = current[-overlap:] if len(current) > overlap else current
+            current = (overlap_text + " " + sent).strip()
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+def _split_text_semantic(text: str, threshold: float = SEMANTIC_SIM_THRESHOLD, size: int = CHUNK_SIZE) -> list[str]:
+    """Semantic chunking — splits text when the topic shifts."""
+    if not text or len(text) <= size:
+        return [text.strip()] if text.strip() else []
+
+    sentences = sent_tokenize(text)
+    if len(sentences) <= 1:
+        return [text.strip()]
+
+    model      = SentenceTransformer(EMBED_MODEL)
+    embeddings = model.encode(sentences, batch_size=64, show_progress_bar=False)
+
+    chunks        = []
+    current_sents = [sentences[0]]
+
+    for i in range(1, len(sentences)):
+        sim = cosine_similarity(
+            embeddings[i - 1].reshape(1, -1),
+            embeddings[i].reshape(1, -1)
+        )[0][0]
+
+        if sim < threshold:
+            chunks.append(" ".join(current_sents))
+            current_sents = [sentences[i]]
+        else:
+            current_sents.append(sentences[i])
+
+    if current_sents:
+        chunks.append(" ".join(current_sents))
+
+    # Hard-split oversized chunks using sentence-aware fallback
+    final_chunks = []
+    for chunk in chunks:
+        if len(chunk) > size:
+            final_chunks.extend(_split_text(chunk, size=size))
+        else:
+            final_chunks.append(chunk)
+
+    return [c for c in final_chunks if c.strip()]
+
+def _split_text_old(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
     """Split text into overlapping chunks, preferring sentence boundaries."""
+    
     if not text or len(text) <= size:
         return [text] if text.strip() else []
 
@@ -312,14 +385,22 @@ def _split_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP)
 
     if current:
         chunks.append(current)
+
     return chunks
 
 
 def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: str) -> list[Chunk]:
     """Convert one extracted section/page/slide into Chunk objects."""
-    raw_chunks = _split_text(section["text"])
-    total      = len(raw_chunks)
-    result     = []
+
+    if CHUNKING_STRATEGY == "semantic":
+        raw_chunks = _split_text_semantic(section["text"])
+    elif CHUNKING_STRATEGY == "sentence":
+        raw_chunks = _split_text(section["text"])
+    else:
+        raw_chunks = _split_text(section["text"])
+
+    total = len(raw_chunks)
+    result = []
 
     for idx, text in enumerate(raw_chunks):
         uid = hashlib.md5(
@@ -416,7 +497,7 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
     type_counts = Counter(p.suffix.lower() for p in all_files)
     print(f"[Step 2] Found {len(all_files)} file(s):")
     for ext, count in sorted(type_counts.items()):
-        print(f"         {ext:6s}  →  {count} file(s)")
+        print(f"         {ext:6s}  ->  {count} file(s)")
     print()
 
     # Step 3 — extract + chunk
@@ -433,7 +514,7 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
                 section_to_chunks(section, path.name, str(path.resolve()), file_type)
             )
         tqdm.write(
-            f"  {path.name:45s}  {len(sections):4d} sections  →  {len(file_chunks):4d} chunks"
+            f"  {path.name:45s}  {len(sections):4d} sections  ->  {len(file_chunks):4d} chunks"
         )
         all_chunks.extend(file_chunks)
 
