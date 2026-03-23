@@ -43,12 +43,20 @@ RETRY_DELAY      = 2       # seconds between retries
 
 # Tagging prompt
 
-def build_prompt(chunk_text: str) -> str:
-    return f"""You are an educational content tagger for C++ and Object-Oriented Programming lecture slides.
+def build_prompt(chunk_text: str, course: str, level: str, slide_title: str = "") -> str:
+    title_hint = f"\nThe slide title is: \"{slide_title}\"." if slide_title else ""
+    return f"""You are an expert educator analyzing lecture slides for a course on "{course}" ({level} level).{title_hint}
 
 Analyze the following lecture slide chunk and return ONLY a JSON object with these fields:
-- "topic"        : The broad subject area (e.g. "OOP", "C++ Basics", "Constructors", "Operator Overloading", "Inheritance", "Polymorphism", "Abstraction", "Encapsulation", "Templates", "STL")
-- "subtopic"     : A specific concept within the topic (e.g. "Single Inheritance", "Copy Constructor", "Virtual Functions")
+- "topic"        : The lecture or chapter this chunk belongs to.
+                   - If a slide title is provided, use it directly as the topic (cleaned to Title Case)
+                   - If no title, infer the topic from the content at lecture/chapter granularity
+                   - Must NOT be the course name itself ("{course}")
+                   - Must NOT be a single concept or function — should represent a full lecture unit
+                   - All chunks from the same slide must share the same topic string
+- "subtopic"     : The specific concept discussed in this chunk within the topic
+                   - Should be a single focused idea (e.g. a specific method, rule, theorem, or technique)
+                   - More specific than topic, but not a line of code or trivial detail
 - "concept_type" : One of: "definition", "example", "explanation", "summary", "other"
 - "difficulty"   : One of: "easy", "medium", "hard"
 - "keywords"     : A comma-separated string of 3-5 key terms from the chunk
@@ -61,8 +69,6 @@ Chunk:
 \"\"\"
 
 JSON:"""
-
-
 # Call Ollama
 
 DEFAULT_TAGS = {
@@ -73,9 +79,9 @@ DEFAULT_TAGS = {
     "keywords":     "",
 }
 
-def tag_chunk(chunk_text: str) -> dict:
+def tag_chunk(chunk_text: str, course: str = "", level: str = "", slide_title: str = "") -> dict:
     """Send chunk to Ollama and return parsed metadata tags."""
-    prompt = build_prompt(chunk_text)
+    prompt = build_prompt(chunk_text, course, level, slide_title)
 
     for attempt in range(1, RETRY_LIMIT + 1):
         try:
@@ -130,8 +136,182 @@ def tag_chunk(chunk_text: str) -> dict:
 
     return DEFAULT_TAGS.copy()
 
+def detect_course(collection) -> str:
+    """Sample chunks from the collection and infer the course/domain."""
+    sample = collection.get(include=["documents"], limit=20)
+    sample_text = "\n---\n".join(sample["documents"][:20])
+
+    prompt = f"""You are an expert educator. Read the following lecture slide excerpts and identify:
+1. The course or subject being taught (e.g. "Data Structures and Algorithms", "C++ Programming", "Machine Learning", "Discrete Mathematics")
+2. The academic level (e.g. "undergraduate", "postgraduate", "professional")
+
+Return ONLY a JSON object with two fields:
+- "course": the name of the course (concise, 2-6 words)
+- "level": the academic level
+
+Return ONLY valid JSON. No explanation, no markdown.
+
+Slide excerpts:
+\"\"\"
+{sample_text[:3000]}
+\"\"\"
+
+JSON:"""
+
+    response = requests.post(
+        OLLAMA_URL,
+        json={
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0.1, "num_predict": 100},
+        },
+        timeout=60,
+    )
+    raw = response.json().get("response", "").strip()
+    start, end = raw.find("{"), raw.rfind("}") + 1
+    result = json.loads(raw[start:end])
+    course = result.get("course", "the subject")
+    level  = result.get("level", "undergraduate")
+    print(f"\n  Detected course : {course}")
+    print(f"  Detected level  : {level}")
+    return course, level
+
+def normalize_topics(collection, course: str, level: str) -> dict:
+    all_meta = collection.get(include=["metadatas"])["metadatas"]
+    raw_topics = sorted(set(
+        m["topic"].lower()
+        for m in all_meta
+        if m.get("topic") not in (None, "", "Unknown")
+    ))
+
+    # Deterministically remove course name
+    course_lower = course.lower()
+    filtered_topics = [t for t in raw_topics if t != course_lower]
+    removed = set(raw_topics) - set(filtered_topics)
+    if removed:
+        print(f"  Removed course-name topics: {removed}")
+
+    # --- Step 1: Ask model to GROUP similar topics (easier task) ---
+    prompt_cluster = f"""You are an expert in "{course}" ({level} level).
+
+Here is a list of lecture topics:
+{json.dumps(filtered_topics, indent=2)}
+
+Group the topics that refer to the same concept into clusters.
+Each cluster should have one representative name in Title Case (2-4 words).
+
+Return ONLY a JSON array of objects, each with:
+- "canonical": the representative name for the group (Title Case)
+- "members": list of raw topic strings from the input that belong to this group
+
+Every raw topic must appear in exactly one group.
+Return ONLY valid JSON. No explanation, no markdown.
+
+JSON:"""
+
+    response = requests.post(
+        OLLAMA_URL,
+        json={
+            "model": OLLAMA_MODEL,
+            "prompt": prompt_cluster,
+            "stream": False,
+            "options": {"temperature": 0.1, "num_predict": 600},
+        },
+        timeout=60,
+    )
+    raw = response.json().get("response", "").strip()
+    start = raw.find("[")
+    end   = raw.rfind("]") + 1
+
+    mapping = {}  # raw_topic -> canonical
+
+    if start != -1 and end > 0:
+        clusters = json.loads(raw[start:end])
+        for cluster in clusters:
+            canonical = cluster.get("canonical", "").strip()
+            members   = cluster.get("members", [])
+            if not canonical:
+                continue
+            for member in members:
+                mapping[member.lower()] = canonical
+    else:
+        # Fallback: just title-case each topic as its own canonical
+        print("  [WARN] Clustering failed, falling back to title-case normalization")
+        mapping = {t: t.title() for t in filtered_topics}
+
+    # Ensure every filtered topic has a mapping (catch any the model missed)
+    for t in filtered_topics:
+        if t not in mapping:
+            mapping[t] = t.title()
+
+    # Map removed course-name topics to None (drop them)
+    for t in removed:
+        mapping[t] = None
+
+    print(f"\n  Topic normalization map:\n{json.dumps(mapping, indent=2)}")
+    return mapping
+
+
+def apply_topic_normalization(collection, mapping: dict):
+    all_data  = collection.get(include=["metadatas"])
+    ids       = all_data["ids"]
+    metadatas = all_data["metadatas"]
+
+    batch_ids, batch_meta = [], []
+    for chunk_id, meta in zip(ids, metadatas):
+        raw_topic = meta.get("topic", "").lower()
+        canonical = mapping.get(raw_topic)
+        if canonical is None:
+            # Drop: remap to "Unknown" so it's excluded downstream
+            meta["topic"] = "Unknown"
+            batch_ids.append(chunk_id)
+            batch_meta.append(meta)
+        elif canonical != meta.get("topic"):
+            meta["topic"] = canonical
+            batch_ids.append(chunk_id)
+            batch_meta.append(meta)
+
+    if batch_ids:
+        collection.update(ids=batch_ids, metadatas=batch_meta)
+        print(f"  Updated {len(batch_ids)} chunks with canonical topics.")
+
+def enforce_per_slide_topic_consistency(collection):
+    """
+    For each (file_name, page_number) group, 
+    assign the majority-voted topic to all chunks in that slide.
+    """
+    from collections import Counter, defaultdict
+
+    all_data  = collection.get(include=["metadatas"])
+    ids       = all_data["ids"]
+    metadatas = all_data["metadatas"]
+
+    # Group chunk indices by slide
+    slide_groups = defaultdict(list)   # (file, page) -> list of (idx, meta)
+    for idx, meta in enumerate(metadatas):
+        key = (meta.get("file_name", ""), meta.get("page_number", 0))
+        slide_groups[key].append((idx, meta))
+
+    batch_ids, batch_meta = [], []
+    for (fname, page), group in slide_groups.items():
+        topics = [m.get("topic", "") for _, m in group if m.get("topic", "") not in ("", "Unknown")]
+        if not topics:
+            continue
+        majority_topic = Counter(topics).most_common(1)[0][0]
+
+        for idx, meta in group:
+            if meta.get("topic") != majority_topic:
+                meta["topic"] = majority_topic
+                batch_ids.append(ids[idx])
+                batch_meta.append(meta)
+
+    if batch_ids:
+        collection.update(ids=batch_ids, metadatas=batch_meta)
+        print(f"  Enforced consistent topic across {len(batch_ids)} chunks.")
 
 # Main enrichment pipeline
+
 
 def enrich_metadata():
     # Connect to ChromaDB
@@ -140,6 +320,7 @@ def enrich_metadata():
         settings=Settings(anonymized_telemetry=False),
     )
     collection = client.get_collection(COLLECTION_NAME)
+    course, level = detect_course(collection)
 
     total = collection.count()
     print(f"\n{'='*55}")
@@ -180,7 +361,8 @@ def enrich_metadata():
     failed     = 0
 
     for i, chunk_id, text, existing_meta in tqdm(to_process, desc="Enriching"):
-        tags = tag_chunk(text)
+        slide_title = existing_meta.get("section", "")
+        tags = tag_chunk(text, course = course, level = level, slide_title=slide_title)
 
         # Merge new tags into existing metadata
         updated_meta = {**existing_meta, **tags}
@@ -208,6 +390,13 @@ def enrich_metadata():
     print(f"  Successfully tagged : {enriched}")
     print(f"  Used defaults       : {failed}")
     print(f"{'='*55}\n")
+
+    print("\n  Normalizing and deduplicating topics...")
+    mapping = normalize_topics(collection, course, level)
+    apply_topic_normalization(collection, mapping)
+
+    print("\n  Enforcing per-slide topic consistency...")
+    enforce_per_slide_topic_consistency(collection)
 
 
 # Preview enriched chunks
