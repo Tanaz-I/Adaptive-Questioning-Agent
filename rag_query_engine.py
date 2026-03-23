@@ -1,6 +1,6 @@
 """
 RAG Query Engine (Hybrid Scoring Version)
-========================================
+
 Uses:
 - 70% vector similarity
 - 30% metadata matching
@@ -18,12 +18,10 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
 
-# ─────────────────────────────────────────────
 # Configuration
-# ─────────────────────────────────────────────
 
 CHROMA_DB_DIR    = "./chroma_db"
-COLLECTION_NAME  = "pptx_rag"
+COLLECTION_NAME  = "rag_kb"
 EMBED_MODEL      = "all-MiniLM-L6-v2"
 TOP_K            = 5
 
@@ -34,9 +32,7 @@ LLM_TEMPERATURE  = 0.2
 LLM_MAX_TOKENS   = 1024
 
 
-# ─────────────────────────────────────────────
 # System Prompt
-# ─────────────────────────────────────────────
 
 SYSTEM_PROMPT = """You are a helpful teaching assistant. 
 Answer the user's question using ONLY the context provided below from lecture slides.
@@ -49,9 +45,7 @@ Always structure your answer as:
 """
 
 
-# ─────────────────────────────────────────────
 # Metadata Scoring (30%)
-# ─────────────────────────────────────────────
 
 def compute_metadata_score(query: str, metadata: dict) -> float:
     """
@@ -74,9 +68,7 @@ def compute_metadata_score(query: str, metadata: dict) -> float:
     return len(overlap) / len(query_terms)
 
 
-# ─────────────────────────────────────────────
 # Retrieve + Hybrid Re-ranking
-# ─────────────────────────────────────────────
 
 def retrieve_chunks(query: str, top_k: int = TOP_K) -> list[dict]:
     """Retrieve chunks using hybrid scoring (vector + metadata)."""
@@ -128,9 +120,7 @@ def retrieve_chunks(query: str, top_k: int = TOP_K) -> list[dict]:
     return chunks[:top_k]
 
 
-# ─────────────────────────────────────────────
 # Build Context
-# ─────────────────────────────────────────────
 
 def build_context(chunks: list[dict]) -> str:
     """Format chunks into readable context."""
@@ -149,9 +139,7 @@ def build_context(chunks: list[dict]) -> str:
     return "\n".join(lines)
 
 
-# ─────────────────────────────────────────────
 # LLM Call
-# ─────────────────────────────────────────────
 
 def ask_llm(query: str, context: str) -> str:
     """Send query + context to LM Studio."""
@@ -189,9 +177,7 @@ def ask_llm(query: str, context: str) -> str:
         return f"[Error] {e}"
 
 
-# ─────────────────────────────────────────────
 # Full Pipeline
-# ─────────────────────────────────────────────
 
 def rag_answer(query: str, verbose: bool = False) -> str:
 
@@ -211,15 +197,12 @@ def rag_answer(query: str, verbose: bool = False) -> str:
     return ask_llm(query, context)
 
 
-# ─────────────────────────────────────────────
 # Main
-# ─────────────────────────────────────────────
 
 def main():
-    print("╔══════════════════════════════════════════╗")
-    print("║   RAG Query Engine — Hybrid Retrieval    ║")
-    print("║   Type 'exit' or 'quit' to stop          ║")
-    print("╚══════════════════════════════════════════╝\n")
+    print("   RAG Query Engine — Hybrid Retrieval   ")
+    print("   Type 'exit' or 'quit' to stop         ")
+    print("\n")
 
     # CLI mode
     if len(sys.argv) > 1:

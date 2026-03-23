@@ -1,6 +1,6 @@
 """
 Chunk Metadata Enrichment
-=========================
+
 Reads all existing chunks from ChromaDB, sends each to qwen2.5:1.5b-instruct
 via Ollama to auto-generate rich metadata tags, then updates ChromaDB.
 
@@ -28,12 +28,10 @@ from chromadb.config import Settings
 from tqdm import tqdm
 
 
-# ─────────────────────────────────────────────
 # Configuration
-# ─────────────────────────────────────────────
 
 CHROMA_DB_DIR    = "./chroma_db"
-COLLECTION_NAME  = "pptx_rag"
+COLLECTION_NAME  = "rag_kb"
 
 OLLAMA_URL       = "http://localhost:11434/api/generate"
 OLLAMA_MODEL     = "qwen2.5:1.5b-instruct"
@@ -43,9 +41,7 @@ RETRY_LIMIT      = 3       # retries per chunk on failure
 RETRY_DELAY      = 2       # seconds between retries
 
 
-# ─────────────────────────────────────────────
 # Tagging prompt
-# ─────────────────────────────────────────────
 
 def build_prompt(chunk_text: str) -> str:
     return f"""You are an educational content tagger for C++ and Object-Oriented Programming lecture slides.
@@ -67,9 +63,7 @@ Chunk:
 JSON:"""
 
 
-# ─────────────────────────────────────────────
 # Call Ollama
-# ─────────────────────────────────────────────
 
 DEFAULT_TAGS = {
     "topic":        "Unknown",
@@ -137,12 +131,10 @@ def tag_chunk(chunk_text: str) -> dict:
     return DEFAULT_TAGS.copy()
 
 
-# ─────────────────────────────────────────────
 # Main enrichment pipeline
-# ─────────────────────────────────────────────
 
 def enrich_metadata():
-    # ── Connect to ChromaDB ──────────────────────────────────────────────
+    # Connect to ChromaDB
     client = chromadb.PersistentClient(
         path=CHROMA_DB_DIR,
         settings=Settings(anonymized_telemetry=False),
@@ -158,13 +150,13 @@ def enrich_metadata():
     print(f"  Model      : {OLLAMA_MODEL}")
     print(f"{'='*55}\n")
 
-    # ── Fetch all chunks ─────────────────────────────────────────────────
+    # Fetch all chunks
     all_data = collection.get(include=["documents", "metadatas"])
     ids       = all_data["ids"]
     documents = all_data["documents"]
     metadatas = all_data["metadatas"]
 
-    # ── Track progress — skip already-enriched chunks ────────────────────
+    # Track progress — skip already-enriched chunks
     to_process = [
         (i, ids[i], documents[i], metadatas[i])
         for i in range(len(ids))
@@ -173,15 +165,15 @@ def enrich_metadata():
 
     skipped = total - len(to_process)
     if skipped:
-        print(f"  ⏭  Skipping {skipped} already-enriched chunks.\n")
+        print(f"    Skipping {skipped} already-enriched chunks.\n")
 
     if not to_process:
-        print("✓ All chunks already enriched. Nothing to do.")
+        print(" All chunks already enriched. Nothing to do.")
         return
 
     print(f"  Tagging {len(to_process)} chunks...\n")
 
-    # ── Tag each chunk and batch-update ChromaDB ──────────────────────────
+    # Tag each chunk and batch-update ChromaDB
     batch_ids  = []
     batch_meta = []
     enriched   = 0
@@ -212,15 +204,13 @@ def enrich_metadata():
         collection.update(ids=batch_ids, metadatas=batch_meta)
 
     print(f"\n{'='*55}")
-    print(f"  ✓ Enrichment complete!")
+    print(f"  Enrichment complete!")
     print(f"  Successfully tagged : {enriched}")
     print(f"  Used defaults       : {failed}")
     print(f"{'='*55}\n")
 
 
-# ─────────────────────────────────────────────
 # Preview enriched chunks
-# ─────────────────────────────────────────────
 
 def preview(n: int = 5):
     """Print a sample of enriched chunks to verify quality."""
@@ -231,19 +221,17 @@ def preview(n: int = 5):
     collection = client.get_collection(COLLECTION_NAME)
     data = collection.get(include=["documents", "metadatas"], limit=n)
 
-    print(f"\n── Sample of {n} enriched chunks ──\n")
+    print(f"\n Sample of {n} enriched chunks \n")
     for doc, meta in zip(data["documents"], data["metadatas"]):
         print(f"  File      : {meta.get('file_name')}  Slide {meta.get('slide_number')}")
-        print(f"  Topic     : {meta.get('topic')}  →  {meta.get('subtopic')}")
+        print(f"  Topic     : {meta.get('topic')}  ->  {meta.get('subtopic')}")
         print(f"  Type      : {meta.get('concept_type')}  |  Difficulty: {meta.get('difficulty')}")
         print(f"  Keywords  : {meta.get('keywords')}")
         print(f"  Text      : {doc[:120]}...")
         print()
 
 
-# ─────────────────────────────────────────────
 # Entry point
-# ─────────────────────────────────────────────
 
 if __name__ == "__main__":
     enrich_metadata()
