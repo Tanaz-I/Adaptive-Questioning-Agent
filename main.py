@@ -4,7 +4,7 @@ import json
 import requests
 from collections import Counter, defaultdict
 from Adaptation_RL.Agent import AdaptiveAgent
-from NLP import knowledge_base_construction, enrich_metadata, rag_query_engine
+from NLP import knowledge_base_construction, enrich_metadata, rag_query_engine, topic_extraction
 from NLP.Q_Generator_A_Evaluator.answer_evaluator import evaluate_answer
 from NLP.Q_Generator_A_Evaluator.question_generator import generate_question
 
@@ -18,8 +18,9 @@ OLLAMA_MODEL    = "qwen2.5:1.5b-instruct"
 # Step 1 — Build Knowledge Base
 # ─────────────────────────────────────────────
 
-# knowledge_base_construction.run_pipeline(DOCS_DIR)
-# collection = enrich_metadata.enrich_metadata()
+knowledge_base_construction.run_pipeline(DOCS_DIR)
+enrich_metadata.enrich_metadata()
+topic_extraction.run_global_topic_extraction()
 
 client = chromadb.PersistentClient(
     path=CHROMA_DB_DIR,
