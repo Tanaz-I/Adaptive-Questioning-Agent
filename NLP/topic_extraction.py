@@ -37,8 +37,8 @@ def call_llm(prompt: str, max_tokens: int = 1024) -> str:
         },
         timeout=120,
     )
-    # raw = response.json()["choices"][0]["message"]["content"].strip()
-    raw = response.json()["response"].strip()
+    raw = response.json()["choices"][0]["message"]["content"].strip()
+    # raw = response.json()["response"].strip()
 
     # Strip markdown fences if present
     if raw.startswith("```"):
