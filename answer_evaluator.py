@@ -1,37 +1,31 @@
 """
-Answer Evaluator (GENERIC FINAL VERSION)
-=======================================
+Answer Evaluator (FINAL ADVANCED VERSION)
+========================================
 
-• Works for ANY domain/topic
-• Uses semantic similarity + keyword + NLI + completeness
-• Uses NLTK stopwords
-• No hardcoded concepts
+Includes:
+✔ Semantic similarity
+✔ Keyword overlap (with stopwords removal)
+✔ NLI-style graded scoring
+✔ Completeness check
+✔ Copy-paste detection
 """
 
-import re
+import numpy as np
 import nltk
 from nltk.corpus import stopwords
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer, util
 
-import nltk
-from nltk.corpus import stopwords
-
-# Auto-download stopwords if not present
-try:
-    STOPWORDS = set(stopwords.words('english'))
-except LookupError:
-    nltk.download('stopwords')
-    STOPWORDS = set(stopwords.words('english'))
-    
 # ─────────────────────────────────────────────
 # Setup
 # ─────────────────────────────────────────────
 
-print("Loading evaluation model...")
-model = SentenceTransformer("all-MiniLM-L6-v2")
+try:
+    STOPWORDS = set(stopwords.words('english'))
+except:
+    nltk.download('stopwords')
+    STOPWORDS = set(stopwords.words('english'))
 
-STOPWORDS = set(stopwords.words('english'))
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 # ─────────────────────────────────────────────
@@ -39,142 +33,145 @@ STOPWORDS = set(stopwords.words('english'))
 # ─────────────────────────────────────────────
 
 def preprocess(text):
-    text = text.lower()
-    text = re.sub(r'[^a-z0-9\s]', '', text)
-    return text
+    words = text.lower().split()
+    return [w for w in words if w not in STOPWORDS]
 
 
 # ─────────────────────────────────────────────
-# 1. Semantic Similarity (CORE SIGNAL)
-# ─────────────────────────────────────────────
-
-def semantic_score(student, reference):
-    emb1 = model.encode([student])[0]
-    emb2 = model.encode([reference])[0]
-    return cosine_similarity([emb1], [emb2])[0][0]
-
-
-# ─────────────────────────────────────────────
-# 2. Keyword Coverage (GENERIC)
+# Keyword Score
 # ─────────────────────────────────────────────
 
 def keyword_score(student, reference):
 
-    ref_words = set(preprocess(reference).split()) - STOPWORDS
-    stu_words = set(preprocess(student).split()) - STOPWORDS
+    s_words = set(preprocess(student))
+    r_words = set(preprocess(reference))
 
-    if not ref_words:
-        return 0
+    if not r_words:
+        return 0.0
 
-    overlap = ref_words.intersection(stu_words)
+    overlap = s_words.intersection(r_words)
 
-    return (len(overlap) / len(ref_words)) ** 0.5
-
-
-# ─────────────────────────────────────────────
-# 3. Heuristic NLI (GENERIC)
-# ─────────────────────────────────────────────
-
-def nli_score(student, reference):
-
-    negatives = {"not", "no", "never", "none"}
-
-    student_words = set(preprocess(student).split())
-    reference_words = set(preprocess(reference).split())
-
-    # contradiction check
-    if student_words.intersection(negatives) and not reference_words.intersection(negatives):
-        return 0.3
-
-    return 1.0
+    return len(overlap) / len(r_words)
 
 
 # ─────────────────────────────────────────────
-# 4. Semantic Completeness (GENERIC)
+# Semantic Score
+# ─────────────────────────────────────────────
+
+def semantic_score(student, reference):
+
+    emb1 = model.encode(student, convert_to_tensor=True)
+    emb2 = model.encode(reference, convert_to_tensor=True)
+
+    score = util.cos_sim(emb1, emb2).item()
+
+    return float(score)
+
+
+# ─────────────────────────────────────────────
+# NLI Score (Improved)
+# ─────────────────────────────────────────────
+
+def nli_score(semantic, keyword):
+
+    # Combine signals instead of binary
+    score = (0.7 * semantic) + (0.3 * keyword)
+
+    return float(score)
+
+
+# ─────────────────────────────────────────────
+# Completeness Score
 # ─────────────────────────────────────────────
 
 def completeness_score(student, reference):
 
-    ref_sentences = [s.strip() for s in reference.split(".") if s.strip()]
+    student_words = student.strip().split()
+    reference_words = reference.strip().split()
 
-    student_emb = model.encode([student])[0]
+    # If too short → very low
+    if len(student_words) < 3:
+        return 0.1
 
-    covered = 0
+    len_ratio = len(student_words) / max(len(reference_words), 1)
 
-    for sent in ref_sentences:
-        sent_emb = model.encode([sent])[0]
+    # Check meaningful words (remove repeated chars)
+    unique_words = set(student_words)
 
-        sim = cosine_similarity([student_emb], [sent_emb])[0][0]
+    # If all words same (like "fffff")
+    if len(unique_words) == 1:
+        return 0.1
 
-        # semantic threshold
-        if sim > 0.6:
-            covered += 1
-
-    return covered / max(len(ref_sentences), 1)
+    # Normal scoring
+    if len_ratio > 0.9:
+        return 1.0
+    elif len_ratio > 0.7:
+        return 0.8
+    elif len_ratio > 0.5:
+        return 0.6
+    elif len_ratio > 0.3:
+        return 0.4
+    else:
+        return 0.2
 
 
 # ─────────────────────────────────────────────
-# Final Evaluation (GENERIC + ADAPTIVE)
+# Copy Detection
+# ─────────────────────────────────────────────
+
+def detect_copy(student, reference, semantic):
+
+    # Exact copy
+    if student.strip().lower() == reference.strip().lower():
+        return True, "⚠️ Exact copy detected!"
+
+    # High similarity + very long answer
+    if semantic > 0.95 and len(student) > 0.8 * len(reference):
+        return True, "⚠️ Answer appears copied or paraphrased heavily!"
+
+    return False, ""
+
+
+# ─────────────────────────────────────────────
+# Final Evaluation
 # ─────────────────────────────────────────────
 
 def evaluate_answer(student, reference, question_type):
 
-    s = semantic_score(student, reference)
-    k = keyword_score(student, reference)
-    n = nli_score(student, reference)
-    c = completeness_score(student, reference)
+    sem = semantic_score(student, reference)
+    key = keyword_score(student, reference)
+    nli = nli_score(sem, key)
+    comp = completeness_score(student, reference)
 
-    # Dynamic weights
+    # Copy detection
+    copied, warning = detect_copy(student, reference, sem)
+
+    # ─────────────────────────────────────────
+    # Dynamic Weighting by Question Type
+    # ─────────────────────────────────────────
+
     if question_type == "factual":
-        weights = (0.5, 0.3, 0.1, 0.1)
+        final = (0.4 * key) + (0.4 * sem) + (0.2 * comp)
 
     elif question_type == "inferential":
-        weights = (0.4, 0.2, 0.2, 0.2)
+        final = (0.5 * sem) + (0.2 * key) + (0.3 * comp)
 
     elif question_type == "evaluative":
-        weights = (0.3, 0.1, 0.3, 0.3)
+        final = (0.6 * sem) + (0.2 * key) + (0.2 * comp)
 
     else:
-        weights = (0.4, 0.2, 0.2, 0.2)
+        final = (0.4 * sem) + (0.3 * key) + (0.3 * comp)
 
-    final = (
-        weights[0] * s +
-        weights[1] * k +
-        weights[2] * n +
-        weights[3] * c
-    )
+    # Penalize if copied
+    if copied:
+        final *= 0.6
 
     return {
-        "semantic_score": round(s, 3),
-        "keyword_score": round(k, 3),
-        "nli_score": round(n, 3),
-        "completeness_score": round(c, 3),
-        "final_score": round(final, 3)
+        "semantic_score": float(round(sem, 3)),
+        "keyword_score": float(round(key, 3)),
+        "nli_score": float(round(nli, 3)),
+        "completeness_score": float(round(comp, 3)),
+        "final_score": float(round(final, 3)),
+        "copied": copied,
+        "warning": warning
     }
-
-
-# ─────────────────────────────────────────────
-# Integrated Pipeline Test
-# ─────────────────────────────────────────────
-
-if __name__ == "__main__":
-
-    from question_generator import generate_question
-
-    q = generate_question("Inheritance", "medium", "inferential")
-
-    print("\nQuestion:\n", q["question"])
-
-    print("\nEnter your answer:\n")
-    student = input("> ")
-
-    result = evaluate_answer(
-        student,
-        q["reference_answer"],
-        q["question_type"]
-    )
-
-    print("\nEvaluation Result:\n")
-
-    for k, v in result.items():
-        print(f"{k}: {v}")

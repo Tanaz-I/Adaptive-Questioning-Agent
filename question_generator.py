@@ -1,163 +1,134 @@
-"""
-Question Generator (FINAL)
-==========================
-
-• Uses RAG (retrieval_engine)
-• Cleans context
-• Enforces question type
-• Returns question_type for evaluator
-"""
-
-import json
-import requests
 from retrieval_engine import retrieve_chunks
+import random
 
-
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "qwen2.5:1.5b-instruct"
-
-
-# ─────────────────────────────────────────────
-# Clean Chunks
-# ─────────────────────────────────────────────
-
-def clean_chunks(chunks):
-    cleaned = []
-    seen = set()
-
-    for c in chunks:
-        text = " ".join(c["text"].split())
-
-        if len(text) < 80:
-            continue
-
-        key = text[:60]
-        if key in seen:
-            continue
-        seen.add(key)
-
-        if any(word in text.lower() for word in ["inheritance", "class", "derived", "base"]):
-            cleaned.append(text)
-
-    return cleaned[:3]
+previous_questions = set()
 
 
 # ─────────────────────────────────────────────
-# Build Prompt
+# CLEAN QUERY → EXTRACT TOPIC DYNAMICALLY
 # ─────────────────────────────────────────────
+def extract_query_parts(query: str):
 
-def build_prompt(chunks, difficulty, question_type):
+    query = query.lower()
 
-    cleaned = clean_chunks(chunks)
+    # Difficulty
+    if "easy" in query:
+        difficulty = "easy"
+    elif "hard" in query:
+        difficulty = "hard"
+    else:
+        difficulty = "medium"
 
-    if not cleaned:
-        return None
+    # Question type
+    if "inferential" in query:
+        qtype = "inferential"
+    elif "evaluative" in query:
+        qtype = "evaluative"
+    else:
+        qtype = "factual"
 
-    context = "\n\n".join(cleaned)
+    # Remove noise words → keep actual topic
+    noise_words = [
+        "easy", "medium", "hard",
+        "question", "generate", "create",
+        "inferential", "evaluative", "factual",
+        "on", "about", "the", "of", "and", "its"
+    ]
 
-    return f"""
-You are an expert educator.
+    words = query.split()
+    topic_words = [w for w in words if w not in noise_words]
 
-Generate ONE {difficulty.upper()} level {question_type.upper()} question.
+    topic = " ".join(topic_words)
 
-STRICT RULES:
-- Do NOT generate incorrect or illogical questions
-- Question MUST be answerable ONLY from the context
+    # fallback
+    if not topic.strip():
+        topic = query
 
-QUESTION TYPE RULES:
-- Factual → direct recall
-- Inferential → MUST combine at least TWO parts of context
-- Evaluative → reasoning/judgment
-
-IMPORTANT:
-- If answer comes from one sentence → DO NOT use
-- Focus on WHY / HOW
-- Avoid trivial questions
-
-GOOD example:
-How does inheritance enable reuse and extension?
-
-BAD example:
-Which class inherits from X?
-
-Context:
-{context}
-
-Return ONLY JSON:
-{{
- "question": "...",
- "reference_answer": "..."
-}}
-"""
+    return topic, difficulty, qtype
 
 
 # ─────────────────────────────────────────────
-# LLM Call
+# GENERATE QUESTION
 # ─────────────────────────────────────────────
+def generate_question(query: str):
 
-def call_llm(prompt):
+    topic, difficulty, qtype = extract_query_parts(query)
 
-    response = requests.post(
-        OLLAMA_URL,
-        json={
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": 0.4}
-        }
-    )
-
-    response.raise_for_status()
-    return response.json()["response"].strip()
-
-
-# ─────────────────────────────────────────────
-# Parse JSON
-# ─────────────────────────────────────────────
-
-def parse_json(output):
-
-    try:
-        start = output.find("{")
-        end = output.rfind("}") + 1
-        return json.loads(output[start:end])
-    except:
-        return {"question": "Error", "reference_answer": "Error"}
-
-
-# ─────────────────────────────────────────────
-# Main Function
-# ─────────────────────────────────────────────
-
-def generate_question(topic, difficulty, question_type):
-
+    # 🔥 PASS FULL TOPIC TO RETRIEVAL
     chunks = retrieve_chunks(topic, difficulty)
 
+    # fallback 1
     if not chunks:
-        return {"question": "No data", "reference_answer": "N/A", "question_type": question_type}
+        chunks = retrieve_chunks(topic, "medium")
 
-    prompt = build_prompt(chunks, difficulty, question_type)
+    # fallback 2
+    if not chunks:
+        chunks = retrieve_chunks(query, "medium")
 
-    if not prompt:
-        return {"question": "Insufficient data", "reference_answer": "N/A", "question_type": question_type}
+    # final fallback
+    if not chunks:
+        return {
+            "question": f"Explain {topic}.",
+            "reference_answer": f"{topic} is an important concept.",
+            "question_type": qtype,
+            "difficulty": difficulty,
+            "topic": topic
+        }
 
-    output = call_llm(prompt)
-    result = parse_json(output)
+    chunk = chunks[0]
+    text = chunk["text"]
+
+    reference_answer = text.strip().replace("\n", " ")[:400]
+
+    # ───────── DYNAMIC QUESTION GENERATION ─────────
+
+    if qtype == "factual":
+        templates = [
+            f"What is {topic}?",
+            f"Define {topic}.",
+            f"Explain {topic}.",
+        ]
+
+    elif qtype == "inferential":
+        templates = [
+            f"How does {topic} work?",
+            f"Why is {topic} important?",
+            f"Explain how {topic} is used in practice.",
+        ]
+
+    else:
+        templates = [
+            f"Evaluate the importance of {topic}.",
+            f"Discuss advantages and limitations of {topic}.",
+            f"Compare different aspects of {topic}.",
+        ]
+
+    question = random.choice(templates)
+
+    # avoid duplicates
+    if question in previous_questions:
+        question += " (Explain briefly)"
+
+    previous_questions.add(question)
 
     return {
-        "question": result["question"],
-        "reference_answer": result["reference_answer"],
-        "question_type": question_type
+        "question": question,
+        "reference_answer": reference_answer,
+        "question_type": qtype,
+        "difficulty": difficulty,
+        "topic": topic
     }
 
 
 # ─────────────────────────────────────────────
-# Test
+# TEST
 # ─────────────────────────────────────────────
-
 if __name__ == "__main__":
 
-    q = generate_question("Inheritance", "medium", "inferential")
+    query = "medium inferential question on graph traversal algorithms"
 
-    print("\nQuestion:\n", q["question"])
-    print("\nReference Answer:\n", q["reference_answer"])
+    q = generate_question(query)
+
+    print("\nTopic:", q["topic"])
+    print("\nQuestion:", q["question"])
+    print("\nAnswer:", q["reference_answer"])
