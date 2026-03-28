@@ -131,7 +131,7 @@ def parse_json(output):
 
 def generate_question(topic, difficulty, question_type):
 
-    chunks = retrieve_chunks(topic, difficulty)
+    chunks = retrieve_chunks(topic, difficulty, question_type)
 
     if not chunks:
         return {"question": "No data", "reference_answer": "N/A", "question_type": question_type}
