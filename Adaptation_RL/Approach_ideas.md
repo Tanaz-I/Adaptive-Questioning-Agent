@@ -100,3 +100,8 @@ Agent continues adapting online during real session
 - Inner loop — current RL agent (question by question)
 - Outer loop — second RL model updates topic difficulty per user (session by session)
 - Moves from document-centric difficulty to learner-relative difficulty
+
+
+## `Agent.py`
+- introduced temperature based sampling as choosing max action sampled same topic redundantly even when prob values were approx same.
+- Entropy term(to be maximised) is used to encourage exploratio and prevent collapse

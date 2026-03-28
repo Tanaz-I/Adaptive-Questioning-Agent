@@ -9,8 +9,8 @@ from Agent import AdaptiveAgent
 
 class RuleBasedAgent:
     
-    def __init__(self, topics_difficulty, w1, w2, w3):
-        self.ks  = KnowledgeState(topics_difficulty=topics_difficulty, window_size=10)
+    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3):
+        self.ks  = KnowledgeState(topics_difficulty=topics_difficulty, prerequisites = prerequisites, window_size=10)
         self.mdp = MDP(
             list(topics_difficulty.keys()),
             difficulty_types=['basic', 'intermediate', 'advanced'],
@@ -36,7 +36,9 @@ class RuleBasedAgent:
                 max(difficulty_level.index(self.curr_diff[topic]) - 1, 0)
             ]
 
-        return topic, self.curr_diff[topic], 'factual'
+        qtype_cycle = ['factual', 'inferential', 'evaluative']
+        qtype = qtype_cycle[self.topic_idx % 3]
+        return topic, self.curr_diff[topic], qtype
 
     def update(self, topic, score, difficulty, question_type):
         self.last_score[topic] = score
@@ -47,13 +49,21 @@ class RuleBasedAgent:
         self.last_score = defaultdict(float)
         self.curr_diff  = {t: 'basic' for t in self.topics}
         for topic in self.topics:
-            self.ks.topic_score[topic]  = 0.0
-            self.ks.attempts[topic]     = 0
+            self.ks.topic_score[topic]   = 0.0
+            self.ks.attempts[topic]      = 0
             self.ks.recent_scores[topic].clear()
-            self.ks.prev_qtype[topic]   = (None, None)
+            self.ks.combo_scores[topic] = defaultdict(list)
+            self.ks.prev_qtype[topic]    = (None, None)
+            self.ks.current_level[topic] = {
+                'diff_idx'        : 0,
+                'qtype_idx'       : 0,
+                'earned_diff_idx' : 0,
+                'earned_qtype_idx': 0
+            }
+        self.ks.prev_topic = None
 
 
-def run_agent_session(agent, simulator, topics, n_questions, is_rl=True):
+def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student_nos = 0):
     """
     Runs one session for either agent.
     Returns:
@@ -69,12 +79,14 @@ def run_agent_session(agent, simulator, topics, n_questions, is_rl=True):
     for step in range(n_questions):
         if is_rl:
             state_vector        = agent.ks.get_state_vector()
-            action_idx, _       = agent.select_action(state_vector, training=False)
+            action_idx, _ , _     = agent.select_action(state_vector, training=False)
             topic, diff, qtype  = agent.mdp.decode(action_idx)
         else:
             topic, diff, qtype  = agent.select_action()
 
         score = simulator.get_score(topic, diff, qtype)
+        if is_rl and student_nos == 0:
+            print(f"Step {step}: {topic} | {diff} | {qtype} | score: {score:.2f}")
         agent.update(topic, score, diff, qtype)
 
         score_progression.append(score)
@@ -88,12 +100,19 @@ def run_agent_session(agent, simulator, topics, n_questions, is_rl=True):
 
 
 def reset_rl_agent(agent, topics):
-    """Reset RL agent knowledge state between sessions."""
     for topic in topics:
-        agent.ks.topic_score[topic]  = 0.0
-        agent.ks.attempts[topic]     = 0
+        agent.ks.topic_score[topic]   = 0.0
+        agent.ks.attempts[topic]      = 0
         agent.ks.recent_scores[topic].clear()
-        agent.ks.prev_qtype[topic]   = (None, None)
+        agent.ks.combo_scores[topic] = defaultdict(list)
+        agent.ks.prev_qtype[topic]    = (None, None)
+        agent.ks.current_level[topic] = {
+            'diff_idx'        : 0,
+            'qtype_idx'       : 0,
+            'earned_diff_idx' : 0,
+            'earned_qtype_idx': 0
+        }
+    agent.ks.prev_topic = None
 
 
 def print_per_topic_report(topics, topics_difficulty,
@@ -130,7 +149,7 @@ def print_per_topic_report(topics, topics_difficulty,
 # Main evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate(topics_difficulty, w1=0.6, w2=0.3, w3=0.1, n_students=20, n_questions=25):
+def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_students=10, n_questions=500):
     """
     Compare RL agent vs rule-based baseline on n_students simulated students.
     Both agents face identical simulated students for fair comparison.
@@ -139,8 +158,8 @@ def evaluate(topics_difficulty, w1=0.6, w2=0.3, w3=0.1, n_students=20, n_questio
     simulator = Simulator(topic_difficulty=topics_difficulty)
 
     print("Pretraining RL agent...")
-    rl_agent       = AdaptiveAgent(topics_difficulty, w1=w1, w2=w2, w3=w3)
-    baseline_agent = RuleBasedAgent(topics_difficulty, w1=w1, w2=w2, w3=w3)
+    rl_agent       = AdaptiveAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
+    baseline_agent = RuleBasedAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
     print("Pretraining done.\n")
 
     # storage
@@ -163,14 +182,14 @@ def evaluate(topics_difficulty, w1=0.6, w2=0.3, w3=0.1, n_students=20, n_questio
         baseline_agent.reset(topics_difficulty)
         simulator.mastery_topic = saved_mastery.copy()
         b_scores, b_mastered, b_mastery_steps, b_per_topic = run_agent_session(
-            baseline_agent, simulator, topics, n_questions, is_rl=False
+            baseline_agent, simulator, topics, n_questions, is_rl=False, student_nos = student
         )
 
         # --- run RL agent (same student) ---
         reset_rl_agent(rl_agent, topics)
         simulator.mastery_topic = saved_mastery.copy()
         rl_scores, rl_mastered, rl_mastery_steps, rl_per_topic = run_agent_session(
-            rl_agent, simulator, topics, n_questions, is_rl=True
+            rl_agent, simulator, topics, n_questions, is_rl=True, student_nos = student
         )
 
         # store results
@@ -202,7 +221,9 @@ def evaluate(topics_difficulty, w1=0.6, w2=0.3, w3=0.1, n_students=20, n_questio
     print(f"{'Metric':<30} {'Baseline':>10} {'RL Agent':>10}")
     print("="*55)
     print(f"{'Avg Final Score':<30} {baseline_avg_score:>10.3f} {rl_avg_score:>10.3f}")
-    print(f"{'Avg Topics Mastered':<30} {baseline_avg_mastered:>10.2f} {rl_avg_mastered:>10.2f}")
+    print(f"{'Avg Topics Mastered':<30} "
+      f"{np.mean(baseline_mastered_all):>6.2f} ± {np.std(baseline_mastered_all):.2f}   "
+      f"{np.mean(rl_mastered_all):>6.2f} ± {np.std(rl_mastered_all):.2f}")
     print("="*55)
 
     # per topic breakdown
@@ -226,7 +247,7 @@ def evaluate(topics_difficulty, w1=0.6, w2=0.3, w3=0.1, n_students=20, n_questio
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('evaluation_plot.png', dpi=150)
+    plt.savefig('Images/evaluation_plot_4.png', dpi=150)
     plt.show()
 
     # 2. Per-topic mastery rate bar chart
@@ -242,14 +263,12 @@ def evaluate(topics_difficulty, w1=0.6, w2=0.3, w3=0.1, n_students=20, n_questio
     plt.title('Per-Topic Mastery Rate — RL Agent vs Baseline')
     plt.legend()
     plt.tight_layout()
-    plt.savefig('mastery_plot.png', dpi=150)
+    plt.savefig('Images/mastery_plot_4.png', dpi=150)
     plt.show()
 
-    print("\nPlots saved to evaluation_plot.png and mastery_plot.png")
 
 
 if __name__ == "__main__":
-
     topics_difficulty = {
         "Neural Networks"     : "advanced",
         "Gradient Descent"    : "intermediate",
@@ -258,9 +277,12 @@ if __name__ == "__main__":
         "Overfitting"         : "intermediate"
     }
 
-    evaluate(
-        topics_difficulty,
-        w1=0.6, w2=0.3, w3=0.1,
-        n_students=20,
-        n_questions=25
-    )
+    prerequisites = {
+        "Neural Networks"     : [],
+        "Gradient Descent"    : [],
+        "Activation Functions": [],
+        "Overfitting"         : ["Neural Networks"],
+        "Backpropagation"     : ["Neural Networks", "Gradient Descent"]
+    }
+
+    evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_students=50, n_questions=1000)
