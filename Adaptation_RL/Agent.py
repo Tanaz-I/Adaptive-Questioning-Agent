@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 
 class AdaptiveAgent:
 
-    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3, n_episodes=3000, n_questions=100):
+    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3, n_episodes=1000, n_questions=100):
         self.mdp = MDP(list(topics_difficulty.keys()), difficulty_types = ['basic', 'intermediate', 'advanced'], q_types = ['factual', 'inferential', 'evaluative'], w1 = w1, w2 = w2, w3 = w3)
         self.policy_network  = PolicyNetwork(num_topics = len(topics_difficulty), num_actions = len(topics_difficulty) * 3 * 3)
         self.simulator = Simulator(topic_difficulty = topics_difficulty)

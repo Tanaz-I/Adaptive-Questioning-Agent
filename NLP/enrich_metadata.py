@@ -62,6 +62,7 @@ Analyze the following lecture slide chunk and return ONLY a JSON object with the
 - "keywords"     : A comma-separated string of 3-5 key terms from the chunk
 
 Return ONLY valid JSON. No explanation, no markdown, no extra text.
+No unnecessary statements. Give only the JSON.
 
 Chunk:
 \"\"\"
@@ -150,6 +151,7 @@ Return ONLY a JSON object with two fields:
 - "level": the academic level
 
 Return ONLY valid JSON. No explanation, no markdown.
+No unnecessary statements. Give only the JSON.
 
 Slide excerpts:
 \"\"\"
@@ -170,6 +172,7 @@ JSON:"""
     )
     raw = response.json().get("response", "").strip()
     start, end = raw.find("{"), raw.rfind("}") + 1
+    print(raw)
     result = json.loads(raw[start:end])
     course = result.get("course", "the subject")
     level  = result.get("level", "undergraduate")
@@ -207,6 +210,7 @@ Return ONLY a JSON array of objects, each with:
 
 Every raw topic must appear in exactly one group.
 Return ONLY valid JSON. No explanation, no markdown.
+No unnecessary statements. Give only the JSON.
 
 JSON:"""
 

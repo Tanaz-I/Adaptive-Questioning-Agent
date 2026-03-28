@@ -49,7 +49,7 @@ EMBED_MODEL     = "all-MiniLM-L6-v2"
 
 CHUNK_SIZE              = 500                 # Max characters per chunk
 CHUNK_OVERLAP           = 80                  # Overlap between chunks
-CHUNKING_STRATEGY       = "semantic"          # semantic or sentence
+CHUNKING_STRATEGY       = "sentence"          # semantic or sentence
 
 SEMANTIC_SIM_THRESHOLD  = 0.4
 
