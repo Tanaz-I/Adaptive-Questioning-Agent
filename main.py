@@ -182,6 +182,8 @@ diff_map_rl_to_nlp = {
 
 N_QUESTIONS  = 10
 session_log  = []
+combo_question_count = {}
+asked_questions_log = {}
 
 for step in range(N_QUESTIONS):
 
@@ -199,8 +201,18 @@ for step in range(N_QUESTIONS):
     print(f"Type       : {qtype}")
 
     # ── 7b. RAG generates question ───────────────────────────
+    combo_key = (topic, diff, qtype)
+
+    question_count = combo_question_count.get(combo_key, 0)
+    asked = asked_questions_log.get(topic, [])
     nlp_diff = diff_map_rl_to_nlp[diff]
-    result   = generate_question(topic, nlp_diff, qtype)
+    result = generate_question(
+        topic,
+        nlp_diff,
+        qtype,
+        question_count=question_count,
+        asked_questions=asked
+    )
 
     question         = result['question']
     reference_answer = result['reference_answer']
@@ -210,6 +222,7 @@ for step in range(N_QUESTIONS):
         continue
 
     print(f"\nQuestion:\n{question}")
+    print(f"\n[Reference Answer]:\n{reference_answer}")
 
     # ── 7c. Get student answer ───────────────────────────────
     print("\nYour answer:")
@@ -253,6 +266,12 @@ for step in range(N_QUESTIONS):
         'mastered'      : mastered[:]
     })
 
+    combo_question_count[combo_key] = question_count + 1
+
+    if topic not in asked_questions_log:
+        asked_questions_log[topic] = []
+
+    asked_questions_log[topic].append(result["question"])
 # ─────────────────────────────────────────────
 # Step 8 — Session Summary
 # ─────────────────────────────────────────────
