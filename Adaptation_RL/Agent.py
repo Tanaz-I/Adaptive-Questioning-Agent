@@ -1,10 +1,10 @@
 import torch
 import torch.nn.functional as F
 import numpy as np
-from knowledge_state import KnowledgeState, difficulty_level, question_types
-from MDP import MDP
-from policy_network import PolicyNetwork
-from Simulator import Simulator
+from Adaptation_RL.knowledge_state import KnowledgeState, difficulty_level, question_types
+from Adaptation_RL.MDP import MDP
+from Adaptation_RL.policy_network import PolicyNetwork
+from Adaptation_RL.Simulator import Simulator
 import matplotlib.pyplot as plt
 from collections import defaultdict, deque
 
@@ -17,6 +17,7 @@ class AdaptiveAgent:
         self.ks = KnowledgeState(topics_difficulty = topics_difficulty, prerequisites = prerequisites, window_size = 10)
         self.optimizer = torch.optim.AdamW( self.policy_network.parameters(), lr = 1e-4)
         self.pretrain(n_episodes =n_episodes, n_questions = n_questions)
+        self.reset_rl_agent(list(topics_difficulty.keys()))
 
     def _build_action_mask(self):
         mask = torch.full((self.mdp.n_actions,), float('-inf'))
@@ -132,3 +133,18 @@ class AdaptiveAgent:
         plt.show()
 
         return total_losses
+    
+    def reset_rl_agent(self, topics):
+        for topic in topics:
+            self.ks.topic_score[topic]   = 0.0
+            self.ks.attempts[topic]      = 0
+            self.ks.recent_scores[topic].clear()
+            self.ks.combo_scores[topic] = defaultdict(list)
+            self.ks.prev_qtype[topic]    = (None, None)
+            self.ks.current_level[topic] = {
+                'diff_idx'        : 0,
+                'qtype_idx'       : 0,
+                'earned_diff_idx' : 0,
+                'earned_qtype_idx': 0
+            }
+        self.ks.prev_topic = None

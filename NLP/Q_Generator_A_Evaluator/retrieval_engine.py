@@ -20,7 +20,7 @@ from sentence_transformers import SentenceTransformer
 # ─────────────────────────────────────────────
 
 CHROMA_DB_DIR = "./chroma_db"
-COLLECTION_NAME = "pptx_rag"
+COLLECTION_NAME = "rag_kb"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 TOP_K = 5
 

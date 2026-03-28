@@ -5,8 +5,8 @@ import requests
 from collections import Counter, defaultdict
 from Adaptation_RL.Agent import AdaptiveAgent
 from NLP import knowledge_base_construction, enrich_metadata, rag_query_engine
-from answer_evaluator import evaluate_answer
-from question_generator import generate_question
+from NLP.Q_Generator_A_Evaluator.answer_evaluator import evaluate_answer
+from NLP.Q_Generator_A_Evaluator.question_generator import generate_question
 
 DOCS_DIR        = "./contents"
 CHROMA_DB_DIR   = "./chroma_db"

@@ -10,7 +10,7 @@ Question Generator (FINAL)
 
 import json
 import requests
-from retrieval_engine import retrieve_chunks
+from NLP.Q_Generator_A_Evaluator.retrieval_engine import retrieve_chunks
 
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
