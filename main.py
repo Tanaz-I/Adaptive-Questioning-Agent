@@ -18,8 +18,8 @@ OLLAMA_MODEL    = "qwen2.5:1.5b-instruct"
 # Step 1 — Build Knowledge Base
 # ─────────────────────────────────────────────
 
-# knowledge_base_construction.run_pipeline(DOCS_DIR)
-# collection = enrich_metadata.enrich_metadata()
+knowledge_base_construction.run_pipeline(DOCS_DIR)
+collection = enrich_metadata.enrich_metadata()
 
 client = chromadb.PersistentClient(
     path=CHROMA_DB_DIR,
