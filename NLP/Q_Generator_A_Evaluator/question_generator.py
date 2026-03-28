@@ -15,7 +15,7 @@ from NLP.Q_Generator_A_Evaluator.retrieval_engine import retrieve_chunks
 
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "qwen2.5:1.5b-instruct"
+MODEL_NAME = "llama3:8b"
 
 
 # ─────────────────────────────────────────────
@@ -150,6 +150,7 @@ Rules:
 {avoid}
 
 Return ONLY valid JSON.
+No unnecessary statements. Give only the JSON.
 No markdown, no text.
 
 {{
@@ -195,6 +196,7 @@ Rules:
 {avoid}
 
 Return ONLY valid JSON.
+No unnecessary statements. Give only the JSON.
 
 {{
  "question": "...",
@@ -238,6 +240,7 @@ Rules:
 {avoid}
 
 Return ONLY valid JSON.
+No unnecessary statements. Give only the JSON.
 
 {{
  "question": "...",
@@ -265,7 +268,7 @@ def generate_question(topic, difficulty, question_type,
     if not chunks:
         return {"question": "No data", "reference_answer": "N/A", "question_type": question_type}
 
-    # 🔥 FILTER BAD / IRRELEVANT CHUNKS
+    
     texts = [
         c["text"] for c in chunks
         if len(c["text"]) > 50 and topic.lower() in c["text"].lower()
@@ -332,7 +335,6 @@ def generate_question(topic, difficulty, question_type,
     )
 
     if not validate(result_eval):
-        # 🔥 FALLBACK → return inferential
         result_inf["question_type"] = "inferential"
         return result_inf
 

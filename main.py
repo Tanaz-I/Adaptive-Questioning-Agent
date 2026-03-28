@@ -12,7 +12,7 @@ DOCS_DIR        = "./contents"
 CHROMA_DB_DIR   = "./chroma_db"
 COLLECTION_NAME = "rag_kb"
 OLLAMA_URL      = "http://localhost:11434/api/generate"
-OLLAMA_MODEL    = "qwen2.5:1.5b-instruct"
+OLLAMA_MODEL    = "llama3:8b"
 
 # ─────────────────────────────────────────────
 # Step 1 — Build Knowledge Base
@@ -87,6 +87,7 @@ Rules (STRICT):
 
 Return ONLY a JSON object where every key is from the valid topics list.
 Return ONLY valid JSON. No explanation, no markdown.
+No unnecessary statements. Give only the JSON.
 
 JSON:"""
 
@@ -137,6 +138,18 @@ for m in all_meta:
     if not topic or topic == "Unknown" or not difficulty:
         continue
     topic_difficulties_raw.setdefault(topic, []).append(difficulty)
+
+valid_topics = set(topic_difficulties_raw.keys())
+
+clean_dependencies = {}
+
+for topic, prereqs in dependencies.items():
+    filtered = [p for p in prereqs if p in valid_topics and p != topic]
+    clean_dependencies[topic] = filtered
+
+dependencies = clean_dependencies
+
+print("\n[Fixed Prerequisites]:", dependencies)
 
 # map NLP difficulty labels → RL difficulty labels
 diff_map_nlp_to_rl = {

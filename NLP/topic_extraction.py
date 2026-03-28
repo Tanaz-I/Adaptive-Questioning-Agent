@@ -18,7 +18,7 @@ from tqdm import tqdm
 CHROMA_DB_DIR   = "./chroma_db"
 COLLECTION_NAME = "rag_kb"
 OLLAMA_URL      = "http://localhost:11434/v1/chat/completions"
-LLM_MODEL_NAME  = "llama3:8b-instruct"
+LLM_MODEL_NAME  = "llama3:8b"
 CANONICAL_TOPICS_FILE = "./canonical_topics.json"
 
 
@@ -37,6 +37,7 @@ def call_llm(prompt: str, max_tokens: int = 1024) -> str:
         },
         timeout=120,
     )
+    # print(response.json())
     raw = response.json()["choices"][0]["message"]["content"].strip()
     # raw = response.json()["response"].strip()
 
@@ -67,6 +68,7 @@ Material from: {file_name}
 ---
 
 Return ONLY a JSON array of topic name strings. No markdown. No explanation.
+No unnecessary statements. Give only the JSON.
 Example: ["Topic A", "Topic B", "Topic C"]
 """
     raw    = call_llm(prompt, max_tokens=512)
