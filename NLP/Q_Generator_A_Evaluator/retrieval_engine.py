@@ -7,12 +7,15 @@ Retrieves relevant chunks from ChromaDB using:
 • Difficulty filtering
 • Semantic similarity ranking
 
+Requirements : pip install rank_bm25
+
 Author: Member 2
 """
 
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
+from rank_bm25 import BM25Okapi
 
 
 # ─────────────────────────────────────────────
@@ -83,9 +86,23 @@ def build_filter(topic, difficulty):
 # Retrieve Chunks (FINAL VERSION)
 # ─────────────────────────────────────────────
 
+def build_bm25_index(collection):
+    data = collection.get(include=["documents", "metadatas"])
+    docs = data["documents"]
+    metas = data["metadatas"]
+
+    tokenized = [doc.lower().split() for doc in docs]
+    bm25 = BM25Okapi(tokenized)
+
+    return bm25, docs, metas
+
+def rrf_score(rank, k=60):
+    return 1 / (k + rank)
+
 def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
 
     collection = connect_collection()
+    bm25, corpus_docs, corpus_metas = build_bm25_index(collection)
 
     # ─────────────────────────────────────────────
     # 1. Build richer query (QUERY EXPANSION)
@@ -144,8 +161,9 @@ def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
             })
 
     # ─────────────────────────────────────────────
-    # 4. Deduplication
+    # 4. Deduplication (MANDATORY BEFORE RRF)
     # ─────────────────────────────────────────────
+
     seen = set()
     unique_chunks = []
 
@@ -155,6 +173,75 @@ def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
         if key not in seen:
             seen.add(key)
             unique_chunks.append(c)
+
+
+    # ─────────────────────────────────────────────
+    # 4.5 BM25 Retrieval + RRF Fusion
+    # ─────────────────────────────────────────────
+
+    # ---- BM25 retrieval ----
+    query_tokens = f"{topic} concepts explanation example definition".lower().split()
+
+    bm25_scores = bm25.get_scores(query_tokens)
+
+    bm25_ranked_indices = sorted(
+        range(len(bm25_scores)),
+        key=lambda i: bm25_scores[i],
+        reverse=True
+    )[:top_k * 3]
+
+    bm25_results = []
+
+    for rank, idx in enumerate(bm25_ranked_indices):
+        bm25_results.append({
+            "text": corpus_docs[idx],
+            "meta": corpus_metas[idx],
+            "score": 0,            # will be updated
+            "bm25_rank": rank
+        })
+
+
+    # ---- RRF Fusion ----
+    rrf_scores = {}
+
+    # embedding ranking
+    for rank, c in enumerate(unique_chunks):
+        key = c["text"]
+        rrf_scores[key] = rrf_score(rank)
+
+    # BM25 ranking
+    for rank, c in enumerate(bm25_results):
+        key = c["text"]
+        rrf_scores[key] = rrf_scores.get(key, 0) + rrf_score(rank)
+
+
+    # ---- Merge embedding + BM25 chunks ----
+    combined_chunks = {}
+
+    # add embedding chunks
+    for c in unique_chunks:
+        combined_chunks[c["text"]] = c
+
+    # add BM25-only chunks
+    for c in bm25_results:
+        if c["text"] not in combined_chunks:
+            combined_chunks[c["text"]] = {
+                "text": c["text"],
+                "meta": c["meta"],
+                "score": 0
+            }
+
+
+    # ---- Assign fused score ----
+    fused_chunks = []
+
+    for text, c in combined_chunks.items():
+        c["score"] += rrf_scores.get(text, 0)
+        fused_chunks.append(c)
+
+
+    
+    unique_chunks = fused_chunks
 
     # ─────────────────────────────────────────────
     # 5. Diversity selection (MMR-style)
@@ -247,7 +334,7 @@ if __name__ == "__main__":
 
     # TEST 2: Subtopic-based (IMPORTANT)
     chunks = retrieve_chunks(
-    topic="Constructors and destructors",
+    topic="Pointers to Class Members",
     difficulty="medium",
     question_type="inferential")
 
