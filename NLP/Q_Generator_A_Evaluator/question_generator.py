@@ -105,7 +105,28 @@ def validate(result):
 
     return True
 
+def contains_code(text):
+    return any(sym in text for sym in [";", "{", "}", "()", "class", "="])
 
+
+def is_mcq_format(q):
+    q = q.lower()
+    return any(opt in q for opt in ["a)", "b)", "c)", "d)"])
+
+
+def is_valid_mcq(q, a):
+    q = q.lower()
+
+    options = ["a)", "b)", "c)", "d)"]
+    count = sum(opt in q for opt in options)
+
+    if count < 3:
+        return False
+
+    if not a or len(a.strip()) < 1:
+        return False
+
+    return True
 # ─────────────────────────────────────────────
 # Avoid repetition helper
 # ─────────────────────────────────────────────
@@ -127,6 +148,7 @@ def build_avoid_str(asked_questions):
 def generate_factual(chunk, topic, difficulty, asked_questions):
 
     avoid = build_avoid_str(asked_questions)
+    code_flag = contains_code(chunk)
 
     prompt = f"""
 You are an expert teacher.
