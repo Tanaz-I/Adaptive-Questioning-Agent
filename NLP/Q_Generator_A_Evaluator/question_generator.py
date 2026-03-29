@@ -140,144 +140,177 @@ def build_avoid_str(asked_questions):
 
     return "\nDo NOT generate any of these questions:\n" + "\n".join(f"- {q}" for q in last_qs)
 
+def build_grounding_rule(meta):
 
+    if meta.get("contains_code"):
+        return "The question MUST refer to the code in the content."
+
+    if meta.get("contains_example"):
+        return "The question MUST refer to the example in the content."
+
+    return ""
 # ─────────────────────────────────────────────
 # 1. Factual Question
 # ─────────────────────────────────────────────
 
-def generate_factual(chunk, topic, difficulty, asked_questions):
+def generate_factual(chunk,meta, topic, difficulty, asked_questions):
 
     avoid = build_avoid_str(asked_questions)
-    code_flag = contains_code(chunk)
+    rule = build_grounding_rule(meta)
 
     prompt = f"""
-You are an expert teacher.
+    You are an expert teacher.
 
-Topic: {topic}
-Difficulty: {difficulty}
+    Topic: {topic}
+    Difficulty: {difficulty}
 
-Content:
-{chunk}
+    Content:
+    {chunk}
 
-Generate ONE factual question.
+    Generate ONE factual question.
 
-Rules:
-- Easy → direct definition
-- Medium → concept understanding
-- Hard → slightly tricky recall
-- Answer must be strictly from content
-- Do NOT use outside knowledge
-- Do NOT add extra explanation
+    Rules:
+    - Easy → direct definition
+    - Medium → concept understanding
+    - Hard → slightly tricky recall
+    - Question MUST be directly answerable from content
+    - Do NOT use outside knowledge
+    - Do NOT add extra explanation
+    - Answer must be complete and specific (not one word)
+    {rule}
 
-{avoid}
+    {avoid}
 
-Return ONLY valid JSON.
-No unnecessary statements. Give only the JSON.
-No markdown, no text.
+    Return ONLY valid JSON.
+    No unnecessary statements. Give only the JSON.
 
-{{
- "question": "...",
- "reference_answer": "..."
-}}
-"""
+    {{
+    "question": "...",
+    "reference_answer": "..."
+    }}
+    """
     return parse_json(call_llm(prompt, temperature=0.7))
 
 # ─────────────────────────────────────────────
 # 2. Inferential Question (2-hop)
 # ─────────────────────────────────────────────
 
-def rewrite_inferential(q, a, chunk2, topic, difficulty, asked_questions):
+def rewrite_inferential(q, a, chunk2, meta2, topic, difficulty, asked_questions):
 
     avoid = build_avoid_str(asked_questions)
+    rule = build_grounding_rule(meta2)
 
     prompt = f"""
-You are an expert teacher.
+    You are an expert teacher.
 
-Topic: {topic}
-Difficulty: {difficulty}
+    Topic: {topic}
+    Difficulty: {difficulty}
 
-Original Question:
-{q}
+    Original Question:
+    {q}
 
-Original Answer:
-{a}
+    Original Answer:
+    {a}
 
-Additional Content:
-{chunk2}
+    Additional Content:
+    {chunk2}
 
-Rewrite the question.
+    Rewrite the question.
 
-Rules:
-- Must combine TWO concepts
-- Medium → basic reasoning
-- Hard → deeper reasoning
-- Must require HOW or WHY
-- Do NOT introduce new concepts
-- Answer must be from given content only
+    Rules:
+    - MUST combine BOTH concepts
+    - MUST require reasoning (How or Why)
+    - Medium → basic reasoning
+    - Hard → deeper reasoning
+    - MUST NOT be answerable from a single sentence
+    - MUST NOT introduce new concepts
+    - Question must be concise (max 20 words)
+    - Answer must combine BOTH contents clearly
+    - Answer must be detailed (not short)
+    {rule}
 
-{avoid}
+    {avoid}
 
-Return ONLY valid JSON.
-No unnecessary statements. Give only the JSON.
+    Return ONLY valid JSON.
+    No unnecessary statements. Give only the JSON.
 
-{{
- "question": "...",
- "reference_answer": "..."
-}}
-"""
+    {{
+    "question": "...",
+    "reference_answer": "..."
+    }}
+    """
     return parse_json(call_llm(prompt, temperature=0.7))
 
 # ─────────────────────────────────────────────
 # 3. Evaluative Question (3-hop)
 # ─────────────────────────────────────────────
 
-def rewrite_evaluative(q, a, chunk3, topic, difficulty, asked_questions):
+def rewrite_evaluative(q, a, chunk3, meta3, topic, difficulty, asked_questions):
 
     avoid = build_avoid_str(asked_questions)
+    rule = build_grounding_rule(meta3)
 
     prompt = f"""
-You are an expert teacher.
+    You are an expert teacher.
 
-Topic: {topic}
-Difficulty: {difficulty}
+    Topic: {topic}
+    Difficulty: {difficulty}
 
-Current Question:
-{q}
+    Current Question:
+    {q}
 
-Current Answer:
-{a}
+    Current Answer:
+    {a}
 
-Additional Content:
-{chunk3}
+    Additional Content:
+    {chunk3}
 
-Rewrite the question.
+    Rewrite the question.
 
-Rules:
-- Must involve comparison / justification
-- Medium → simple reasoning
-- Hard → critical evaluation
-- Combine ALL concepts
-- Do NOT use external knowledge
+    Rules:
+    - MUST involve comparison / justification
+    - MUST require reasoning
+    - Medium → simple reasoning
+    - Hard → critical evaluation
+    - MUST combine ALL concepts
+    - MUST NOT use external knowledge
+    - Answer must justify clearly (not generic)
+    {rule}
 
-{avoid}
+    {avoid}
 
-Return ONLY valid JSON.
-No unnecessary statements. Give only the JSON.
+    Return ONLY valid JSON.
+    No unnecessary statements. Give only the JSON.
 
-{{
- "question": "...",
- "reference_answer": "..."
-}}
-"""
+    {{
+    "question": "...",
+    "reference_answer": "..."
+    }}
+    """
     return parse_json(call_llm(prompt, temperature=0.7))
 
 # ─────────────────────────────────────────────
 # MAIN FUNCTION
 # ─────────────────────────────────────────────
+def group_chunks_by_subtopic(chunks):
+
+    groups = {}
+
+    for c in chunks:
+        sub = c.get("subtopic", "unknown")
+
+        if sub not in groups:
+            groups[sub] = []
+
+        groups[sub].append(c)
+
+    return groups
 
 def generate_question(topic, difficulty, question_type,
                       question_count=0,
-                      asked_questions=None):
+                      asked_questions=None,
+                      prerequisites=None,
+                      concept_graph=None):
 
     if asked_questions is None:
         asked_questions = []
@@ -285,36 +318,64 @@ def generate_question(topic, difficulty, question_type,
     # ─────────────────────────────────────────────
     # Step 1: Retrieve chunks
     # ─────────────────────────────────────────────
-    chunks = retrieve_chunks(topic, difficulty, question_type)
+    chunks = retrieve_chunks(
+        topic,
+        difficulty,
+        question_type,
+        prerequisites=prerequisites,
+        concept_graph=concept_graph
+    )
 
     if not chunks:
         return {"question": "No data", "reference_answer": "N/A", "question_type": question_type}
 
     
-    texts = [
-        c["text"] for c in chunks
-        if len(c["text"]) > 50 and topic.lower() in c["text"].lower()
-    ]
+    # texts = [
+    #     c["text"] for c in chunks
+    #     if len(c["text"]) > 50 and topic.lower() in c["text"].lower()
+    # ]
 
-    if len(texts) < 2:
-        texts = [c["text"] for c in chunks if len(c["text"]) > 50]
+    # if len(texts) < 2:
+    #     texts = [c["text"] for c in chunks if len(c["text"]) > 50]
 
-    if len(texts) < 2:
-        return {"question": "Insufficient data", "reference_answer": "N/A", "question_type": question_type}
+    # if len(texts) < 2:
+    #     return {"question": "Insufficient data", "reference_answer": "N/A", "question_type": question_type}
 
-    # ─────────────────────────────────────────────
-    # Step 2: Chunk rotation
-    # ─────────────────────────────────────────────
-    idx = question_count % len(texts)
+    # # ─────────────────────────────────────────────
+    # # Step 2: Chunk rotation
+    # # ─────────────────────────────────────────────
+    # idx = question_count % len(texts)
 
-    chunk1 = texts[idx]
-    chunk2 = texts[(idx + 1) % len(texts)]
-    chunk3 = texts[(idx + 2) % len(texts)]
+    # chunk1 = texts[idx]
+    # chunk2 = texts[(idx + 1) % len(texts)]
+    # chunk3 = texts[(idx + 2) % len(texts)]
+    
+    groups = group_chunks_by_subtopic(chunks)
+    subtopics = list(groups.keys())
 
+    if len(subtopics) < 2:
+        selected = chunks[:3]
+    else:
+        s1 = subtopics[question_count % len(subtopics)]
+        s2 = subtopics[(question_count + 1) % len(subtopics)]
+        s3 = subtopics[(question_count + 2) % len(subtopics)]
+
+        selected = [
+            groups[s1][0],
+            groups[s2][0],
+            groups[s3][0]
+        ]
+
+    # Extract text + metadata
+    chunk1, chunk2, chunk3 = selected
+
+    text1, meta1 = chunk1["text"], chunk1
+    text2, meta2 = chunk2["text"], chunk2
+    text3, meta3 = chunk3["text"], chunk3
     # ─────────────────────────────────────────────
     # Step 3: Factual
     # ─────────────────────────────────────────────
-    result = generate_factual(chunk1, topic, difficulty, asked_questions)
+    result = generate_factual(text1, meta1, topic, difficulty, asked_questions)
 
     if not validate(result):
         result["question_type"] = "factual"
@@ -330,7 +391,8 @@ def generate_question(topic, difficulty, question_type,
     result_inf = rewrite_inferential(
         result["question"],
         result["reference_answer"],
-        chunk2,
+        text2,
+        meta2,
         topic,
         difficulty,
         asked_questions
@@ -350,7 +412,8 @@ def generate_question(topic, difficulty, question_type,
     result_eval = rewrite_evaluative(
         result_inf["question"],
         result_inf["reference_answer"],
-        chunk3,
+        text3,
+        meta3,
         topic,
         difficulty,
         asked_questions

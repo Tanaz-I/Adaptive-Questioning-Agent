@@ -7,6 +7,7 @@ from Adaptation_RL.Agent import AdaptiveAgent
 from NLP import knowledge_base_construction, enrich_metadata, rag_query_engine, topic_extraction
 from NLP.Q_Generator_A_Evaluator.answer_evaluator import evaluate_answer
 from NLP.Q_Generator_A_Evaluator.question_generator import generate_question
+from NLP.concept_graph import build_concept_graph
 
 DOCS_DIR        = "./contents"
 CHROMA_DB_DIR   = "./chroma_db"
@@ -127,6 +128,32 @@ def safe_parse_json(raw, fallback):
 dependencies = safe_parse_json(response.json()["response"], fallback={})
 print(f"Prerequisites: {dependencies}")
 
+data = collection.get(include=["documents", "metadatas"])
+filtered_chunks = []
+
+for doc, meta in zip(data["documents"], data["metadatas"]):
+
+    if meta.get("topic") in (None, "", "Unknown"):
+        continue
+
+    # prioritize useful chunks
+    if meta.get("concept_type") in ["definition", "explanation", "example"]:
+        filtered_chunks.append({
+            "text": doc,
+            "topic": meta.get("topic"),
+            "subtopic": meta.get("subtopic")
+        })
+
+filtered_chunks = filtered_chunks[:150]
+
+concept_graph = build_concept_graph(filtered_chunks)
+print(f"[Graph] Nodes: {len(concept_graph)}")
+
+sample_keys = list(concept_graph.keys())[:5]
+print("[Graph Sample]:", sample_keys)
+
+print("[Graph] Done.\n")
+
 # ─────────────────────────────────────────────
 # Step 5 — Compute Topic Difficulty (mode)
 # ─────────────────────────────────────────────
@@ -225,7 +252,9 @@ for step in range(N_QUESTIONS):
         nlp_diff,
         qtype,
         question_count=question_count,
-        asked_questions=asked
+        asked_questions=asked,
+        prerequisites=dependencies,
+        concept_graph=concept_graph
     )
 
     question         = result['question']

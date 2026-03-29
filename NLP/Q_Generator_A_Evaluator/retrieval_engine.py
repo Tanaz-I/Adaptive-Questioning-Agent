@@ -63,21 +63,11 @@ def connect_collection():
 # ─────────────────────────────────────────────
 
 def build_filter(topic, difficulty):
-    """
-    Matches:
-    - topic OR subtopic
-    - AND difficulty
-    """
 
     return {
-        "$and": [
-            {
-                "$or": [
-                    {"topic": topic},
-                    {"subtopic": topic}
-                ]
-            },
-            {"difficulty": difficulty}
+        "$or": [
+            {"topic": topic},
+            {"subtopic": topic}
         ]
     }
 
@@ -99,7 +89,26 @@ def build_bm25_index(collection):
 def rrf_score(rank, k=60):
     return 1 / (k + rank)
 
-def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
+def expand_with_prereq_and_graph(topic, prerequisites, concept_graph):
+
+    expanded = set([topic.lower()])
+
+    # ---- prerequisites ----
+    if prerequisites and topic in prerequisites:
+        for p in prerequisites[topic]:
+            expanded.add(p.lower())
+
+    # ---- concept graph ----
+    if concept_graph:
+        from NLP.concept_graph import expand_topic
+        related = expand_topic(topic, concept_graph)
+
+        for r in related:
+            expanded.add(r.lower())
+
+    return list(expanded)
+
+def retrieve_chunks(topic, difficulty, question_type, prerequisites=None, concept_graph=None, top_k=TOP_K):
 
     collection = connect_collection()
     bm25, corpus_docs, corpus_metas = build_bm25_index(collection)
@@ -107,16 +116,35 @@ def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
     # ─────────────────────────────────────────────
     # 1. Build richer query (QUERY EXPANSION)
     # ─────────────────────────────────────────────
-    query_variants = [
+    expanded_topics = expand_with_prereq_and_graph(
         topic,
-        f"{topic} explanation",
-        f"{topic} example",
-        f"{topic} definition",
-        f"{topic} concepts",
-        f"{topic} applications",
-        f"{topic} {difficulty}",
-        f"{topic} {question_type}"
-    ]
+        prerequisites,
+        concept_graph
+    )
+
+    query_variants = []
+
+    for t in expanded_topics:
+        query_variants.extend([
+            t,
+            f"{t} explanation",
+            f"{t} example",
+            f"{t} definition"
+            f"{t} concepts",
+            f"{t} applications",
+            f"{t} {difficulty}",
+            f"{t} {question_type}"
+        ])
+    # query_variants = [
+    #     topic,
+    #     f"{topic} explanation",
+    #     f"{topic} example",
+    #     f"{topic} definition",
+    #     f"{topic} concepts",
+    #     f"{topic} applications",
+    #     f"{topic} {difficulty}",
+    #     f"{topic} {question_type}"
+    # ]
 
     # ─────────────────────────────────────────────
     # 2. Metadata filter (same as before)
@@ -180,7 +208,7 @@ def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
     # ─────────────────────────────────────────────
 
     # ---- BM25 retrieval ----
-    query_tokens = f"{topic} concepts explanation example definition".lower().split()
+    query_tokens = " ".join(expanded_topics + ["concepts", "usage", "working"]).lower().split()
 
     bm25_scores = bm25.get_scores(query_tokens)
 
