@@ -111,8 +111,8 @@ def validate(result, expected_type="factual"):
 
     return True
 
-def contains_code(text):
-    return any(sym in text for sym in [";", "{", "}", "()", "class", "="])
+# def contains_code(text):
+#     return any(sym in text for sym in [";", "{", "}", "()", "class", "="])
 
 
 def is_mcq_format(q):
@@ -475,7 +475,7 @@ def generate_question(topic, difficulty, question_type,
 
         result = generate_mcq(text1, meta1, topic, difficulty, asked_questions)
 
-        if not is_valid_mcq(result.get("question",""), result.get("correct_answer","")):
+        if not is_valid_mcq(result):
             result = generate_factual(text1, meta1, topic, difficulty, asked_questions)
 
     else:

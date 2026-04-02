@@ -323,10 +323,12 @@ def retrieve_chunks(topic, difficulty, question_type, prerequisites=None, concep
             "concept_type": meta.get("concept_type"),
             "keywords": meta.get("keywords"),
             "file_name": meta.get("file_name"),
-            "slide_number": meta.get("slide_number"),
-            "slide_title": meta.get("slide_title"),
+            "page_number": meta.get("page_number"),
+            "section": meta.get("section"),
             "similarity_score": round(c["score"], 4),
-            "retrieval_source": "multi_query_mmr"
+            "retrieval_source": "multi_query_mmr",
+            "contains_code": meta.get('contains_code'),
+            "contains_example": meta.get('contains_example')
         })
 
     return output
@@ -339,7 +341,10 @@ def get_neighbor_chunks(chunk, window=1):
     neighbors = []
 
     file_name = chunk.get("file_name")
-    page = chunk.get("slide_number") or chunk.get("page_number")
+    page = chunk.get("page_number")
+    print(chunk)
+    print('-----'*10)
+    print(page)
 
     for doc, meta in zip(data["documents"], data["metadatas"]):
 
@@ -409,5 +414,7 @@ if __name__ == "__main__":
         print(f"Subtopic    : {c['subtopic']}")
         print(f"Difficulty  : {c['difficulty']}")
         print(f"Similarity  : {c['similarity_score']}")
-        print(f"Slide Title : {c['slide_title']}")
+        print(f"Slide Title : {c['section']}")
         print(f"Text        : {c['text'][:150]}...\n")
+
+    a = get_neighbor_chunks(chunk=chunks[0])
