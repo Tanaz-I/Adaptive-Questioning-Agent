@@ -449,10 +449,10 @@ def generate_question(topic, difficulty, question_type,
     neighbors3 = get_neighbor_chunks(primary3)
 
     # BUILD CONTEXT (merge)
-    def build_context(primary, neighbors, k=2):
+    def build_context(primary, neighbors):
         texts = [primary["text"]]
 
-        for n in neighbors[:k]:
+        for n in neighbors:
             if n['text'] != primary['text']:
                 texts.append(n["text"])
 

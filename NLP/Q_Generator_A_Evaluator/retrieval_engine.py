@@ -129,7 +129,7 @@ def retrieve_chunks(topic, difficulty, question_type, prerequisites=None, concep
             t,
             f"{t} explanation",
             f"{t} example",
-            f"{t} definition"
+            f"{t} definition",
             f"{t} concepts",
             f"{t} applications",
             f"{t} {difficulty}",
