@@ -11,7 +11,8 @@ Advanced Question Generator (FINAL - MULTI-HOP VERSION)
 
 import json
 import requests
-from NLP.Q_Generator_A_Evaluator.retrieval_engine import retrieve_chunks
+from NLP.Q_Generator_A_Evaluator.retrieval_engine import retrieve_chunks, get_neighbor_chunks
+import numpy as np
 
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -86,7 +87,7 @@ def parse_json(output):
 # Validation
 # ─────────────────────────────────────────────
 
-def validate(result):
+def validate(result, expected_type="factual"):
 
     if not result:
         return False
@@ -97,11 +98,16 @@ def validate(result):
     if len(q.split()) < 5:
         return False
 
-    if len(a.split()) < 8:
+    if len(a.split()) < 5:
         return False
 
     if q == "Error" or a == "Error":
         return False
+
+    if expected_type == "factual":
+        if is_mcq_format(q):
+            if not is_valid_mcq(q, result.get("correct_answer", "")):
+                return False
 
     return True
 
@@ -111,19 +117,32 @@ def contains_code(text):
 
 def is_mcq_format(q):
     q = q.lower()
-    return any(opt in q for opt in ["a)", "b)", "c)", "d)"])
+
+    patterns = [
+        "a)", "b)", "c)", "d)",
+        "a.", "b.", "c.", "d.",
+        "1)", "2)", "3)", "4)"
+    ]
+
+    return sum(p in q for p in patterns) >= 3
 
 
-def is_valid_mcq(q, a):
-    q = q.lower()
+def is_valid_mcq(result):
 
-    options = ["a)", "b)", "c)", "d)"]
-    count = sum(opt in q for opt in options)
+    q = result.get("question", "").lower()
+    options = result.get("options", {})
+    correct = result.get("correct_answer", "").lower()
+
+    if not options or len(options) != 4:
+        return False
+
+    patterns = ["a)", "b)", "c)", "d)", "a.", "b.", "c.", "d."]
+    count = sum(p in q for p in patterns)
 
     if count < 3:
         return False
 
-    if not a or len(a.strip()) < 1:
+    if correct not in ["a)", "b)", "c)", "d)", "a", "b", "c", "d"]:
         return False
 
     return True
@@ -168,7 +187,13 @@ def generate_factual(chunk,meta, topic, difficulty, asked_questions):
     {chunk}
 
     Generate ONE factual question.
-
+    STRICT RULES:
+    - MUST NOT be a multiple choice question (MCQ)
+    - MUST NOT start with "Which of the following"
+    - MUST NOT include options like A), B), etc.
+    - MUST be a direct question (short answer)
+    - MUST be answerable in 1 to 3 sentences
+    - MUST NOT require guessing
     Rules:
     - Easy → direct definition
     - Medium → concept understanding
@@ -190,6 +215,52 @@ def generate_factual(chunk,meta, topic, difficulty, asked_questions):
     }}
     """
     return parse_json(call_llm(prompt, temperature=0.7))
+
+def generate_mcq(context, meta, topic, difficulty, asked_questions):
+
+    avoid = build_avoid_str(asked_questions)
+    rule = build_grounding_rule(meta)
+
+    prompt = f"""
+You are an expert teacher.
+
+Topic: {topic}
+Difficulty: {difficulty}
+
+Content:
+{context}
+
+Generate ONE MCQ question.
+
+Rules:
+- Question MUST be based on MAIN concept
+- Do NOT use outside knowledge
+- {rule}
+- Question MUST use terms from content
+
+MCQ Rules:
+- 4 options (A, B, C, D)
+- Only ONE correct answer
+- Distractors must be realistic
+- Answer must be from content
+- If content is insufficient, DO NOT generate
+
+{avoid}
+
+Return ONLY JSON:
+
+{{
+ "question": "...",
+ "options": {{
+   "a)": "...",
+   "b)": "...",
+   "c)": "...",
+   "d)": "..."
+ }},
+ "correct_answer": "a)"
+}}
+"""
+    return parse_json(call_llm(prompt))
 
 # ─────────────────────────────────────────────
 # 2. Inferential Question (2-hop)
@@ -369,17 +440,49 @@ def generate_question(topic, difficulty, question_type,
     # Extract text + metadata
     chunk1, chunk2, chunk3 = selected
 
-    text1, meta1 = chunk1["text"], chunk1
-    text2, meta2 = chunk2["text"], chunk2
-    text3, meta3 = chunk3["text"], chunk3
+    # PRIMARY chunks (decision making)
+    primary1, primary2, primary3 = chunk1, chunk2, chunk3
+
+    # GET NEIGHBORS (context only)
+    neighbors1 = get_neighbor_chunks(primary1)
+    neighbors2 = get_neighbor_chunks(primary2)
+    neighbors3 = get_neighbor_chunks(primary3)
+
+    # BUILD CONTEXT (merge)
+    def build_context(primary, neighbors, k=2):
+        texts = [primary["text"]]
+
+        for n in neighbors[:k]:
+            if n['text'] != primary['text']:
+                texts.append(n["text"])
+
+        return "\n\n".join(texts)
+
+    text1 = build_context(primary1, neighbors1)
+    text2 = build_context(primary2, neighbors2)
+    text3 = build_context(primary3, neighbors3)
+
+    # IMPORTANT: metadata only from primary
+    meta1 = primary1
+    meta2 = primary2
+    meta3 = primary3
     # ─────────────────────────────────────────────
     # Step 3: Factual
     # ─────────────────────────────────────────────
-    result = generate_factual(text1, meta1, topic, difficulty, asked_questions)
+    prob = np.random.uniform(0, 1)
 
+    if prob < 0.3 and question_type == "factual":
+
+        result = generate_mcq(text1, meta1, topic, difficulty, asked_questions)
+
+        if not is_valid_mcq(result.get("question",""), result.get("correct_answer","")):
+            result = generate_factual(text1, meta1, topic, difficulty, asked_questions)
+
+    else:
+        result = generate_factual(text1, meta1, topic, difficulty, asked_questions)
+    
     if not validate(result):
-        result["question_type"] = "factual"
-        return result
+        result = generate_factual(text1, meta1, topic, difficulty, asked_questions)
 
     if question_type == "factual":
         result["question_type"] = "factual"
@@ -388,6 +491,7 @@ def generate_question(topic, difficulty, question_type,
     # ─────────────────────────────────────────────
     # Step 4: Inferential
     # ─────────────────────────────────────────────
+
     result_inf = rewrite_inferential(
         result["question"],
         result["reference_answer"],
@@ -398,17 +502,31 @@ def generate_question(topic, difficulty, question_type,
         asked_questions
     )
 
+    # retry once
     if not validate(result_inf):
-        result["question_type"] = "factual"
-        return result
+        result_inf = rewrite_inferential(
+            result["question"],
+            result["reference_answer"],
+            text2,
+            meta2,
+            topic,
+            difficulty,
+            asked_questions
+        )
 
+    # ── FINAL DECISION FOR INFERENTIAL ──
     if question_type == "inferential":
-        result_inf["question_type"] = "inferential"
-        return result_inf
 
+        if validate(result_inf):
+            result_inf["question_type"] = "inferential"
+            return result_inf
+        else:
+            result["question_type"] = "factual"
+            return result
     # ─────────────────────────────────────────────
     # Step 5: Evaluative
     # ─────────────────────────────────────────────
+
     result_eval = rewrite_evaluative(
         result_inf["question"],
         result_inf["reference_answer"],
@@ -419,12 +537,29 @@ def generate_question(topic, difficulty, question_type,
         asked_questions
     )
 
+    # retry once
     if not validate(result_eval):
+        result_eval = rewrite_evaluative(
+            result_inf["question"],
+            result_inf["reference_answer"],
+            text3,
+            meta3,
+            topic,
+            difficulty,
+            asked_questions
+        )
+
+    # ── FINAL DECISION FOR EVALUATIVE ──
+    if validate(result_eval):
+        result_eval["question_type"] = "evaluative"
+        return result_eval
+
+    if validate(result_inf):
         result_inf["question_type"] = "inferential"
         return result_inf
 
-    result_eval["question_type"] = "evaluative"
-    return result_eval
+    result["question_type"] = "factual"
+    return result
 
 # ─────────────────────────────────────────────
 # TEST

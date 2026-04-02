@@ -331,6 +331,34 @@ def retrieve_chunks(topic, difficulty, question_type, prerequisites=None, concep
 
     return output
 
+def get_neighbor_chunks(chunk, window=1):
+
+    collection = connect_collection()
+    data = collection.get(include=["documents", "metadatas"])
+
+    neighbors = []
+
+    file_name = chunk.get("file_name")
+    page = chunk.get("slide_number") or chunk.get("page_number")
+
+    for doc, meta in zip(data["documents"], data["metadatas"]):
+
+        if meta.get("file_name") != file_name:
+            continue
+
+        page2 = meta.get("slide_number") or meta.get("page_number")
+
+        if page2 is None:
+            continue
+
+        if abs(page2 - page) <= window:
+            neighbors.append({
+                "text": doc,
+                "meta": meta
+            })
+
+    return neighbors
+
 
 # ─────────────────────────────────────────────
 # Test Mode
