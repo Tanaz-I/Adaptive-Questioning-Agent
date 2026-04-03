@@ -18,6 +18,15 @@ import numpy as np
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_NAME = "llama3:8b"
 
+EVALUATIVE_FRAMES = [
+    "Under what conditions would you prefer {A} over {B}? Justify your choice.",
+    "A developer argues that {A} makes {B} unnecessary. Evaluate this claim.",
+    "What is the most significant limitation of {A} that {B} addresses? Explain.",
+    "When would using {A} actually worsen program behavior? Give a concrete scenario.",
+    "Compare the design tradeoffs of {A} and {B} for a memory-constrained system.",
+    "If you had to choose between {A} and {B} for a large codebase, which would you pick and why?",
+]
+
 
 # ─────────────────────────────────────────────
 # LLM Call
@@ -107,8 +116,8 @@ def parse_json(output):
         answer = "Error"
 
     # clean unwanted prefixes
-    print(answer)
-    print(question)
+    # print(answer)
+    # print(question)
     question = question.replace('"question":', '').strip()
     answer = answer.replace('"reference_answer":', '').strip()
 
@@ -228,6 +237,11 @@ Rules:
 - You may apply reasoning if needed
 - Do NOT say "not in context"
 - Be precise and correct
+
+CRITICAL:
+- The answer MUST be based ONLY on the given content
+- Use specific terms, variables, or examples from the content
+- DO NOT use general knowledge unless it appears in the content
 
 Answer:
 """
@@ -443,102 +457,170 @@ Return ONLY JSON:
 # ─────────────────────────────────────────────
 # 2. Inferential Question (2-hop)
 # ─────────────────────────────────────────────
+def find_connection(text_a, text_b, topic):
+    """
+    Ask LLM to identify the causal/functional relationship between
+    two pieces of content before writing the question.
+    """
+    prompt = f"""You are an expert in {topic}.
+
+Concept A (what student already knows):
+{text_a}
+
+Concept B (new material):
+{text_b}
+
+In ONE sentence, describe the causal or functional relationship between
+these two concepts. Be specific — describe HOW or WHY one affects the other.
+Return ONLY the one sentence, no preamble or explanation.
+"""
+    connection = call_llm(prompt, temperature=0.2)
+    return connection.strip().strip('"')
+
 
 def rewrite_inferential(q, a, chunk2, meta2, topic, difficulty, asked_questions):
-
     avoid = build_avoid_str(asked_questions)
-    rule = build_grounding_rule(meta2)
+
+    # Step 1: Find the conceptual bridge
+    connection = find_connection(a, chunk2, topic)
+
+    # Step 2: Code injection for chunk2 if applicable
     code_inj, code_rule = build_code_injection(chunk2, meta2)
 
-    prompt = f"""
-    You are an expert teacher.
+    diff_guide = {
+        "easy":         "The reasoning should be straightforward — one step of logic.",
+        "medium":       "The reasoning should require connecting two ideas explicitly.",
+        "hard":         "The reasoning should involve a subtle or non-obvious connection.",
+        "basic":        "The reasoning should be straightforward — one step of logic.",
+        "intermediate": "The reasoning should require connecting two ideas explicitly.",
+        "advanced":     "The reasoning should involve a subtle or non-obvious connection.",
+    }.get(difficulty, "The reasoning should require connecting two ideas.")
 
-    Topic: {topic}
-    Difficulty: {difficulty}
+    prompt = f"""You are an expert teacher.
 
-    Original Question:
-    {q}
+Topic: {topic}
+Difficulty: {difficulty}
 
-    Original Answer:
-    {a}
+What the student already knows:
+{a}
 
-    Additional Content:
-    {chunk2}
-    {code_inj}
+Additional content:
+{chunk2}
+{code_inj}
 
-    Rewrite the question.
+The key relationship between these two ideas is:
+"{connection}"
 
-    Rules:
-    - MUST combine BOTH concepts
-    - MUST require reasoning (How or Why)
-    - Medium → basic reasoning
-    - Hard → deeper reasoning
-    - MUST NOT be answerable from a single sentence
-    - MUST NOT introduce new concepts
-    - Question must be concise (max 20 words)
-    - Answer must combine BOTH contents clearly
-    - Answer must be detailed (not short)
-    {code_rule}
+Write ONE inferential question that REQUIRES the student to use this
+relationship in their answer.
 
-    {avoid}
+Question rules:
+CRITICAL REQUIREMENTS:
+- The question MUST require using this relationship:
+  "{connection}"
+- The question MUST NOT be answerable without understanding this relationship
+- The question MUST involve cause, effect, or mechanism
+- The question MUST NOT ask for steps or definition
+- Must start with "How" or "Why" or "Explain why" or "What happens when"
+- Must NOT be answerable from either piece of content alone
+- Must NOT be answerable with a simple definition
+- Maximum 25 words
+- {diff_guide}
+{code_rule}
 
-    Return ONLY valid JSON.
-    No unnecessary statements. Give only the JSON.
+Answer rules:
+- Must explicitly state the connection: "{connection}"
+- Must be 3-5 sentences minimum
+- Must explain the mechanism, not just state the conclusion
 
-    {{
-    "question": "...",
-    "reference_answer": "..."
-    }}
-    """
-    return parse_json(call_llm(prompt, temperature=0.7))
+{avoid}
+
+Return ONLY valid JSON:
+{{"question": "...", "reference_answer": "..."}}"""
+
+    return parse_json(call_llm(prompt, temperature=0.65))
+
 
 # ─────────────────────────────────────────────
 # 3. Evaluative Question (3-hop)
 # ─────────────────────────────────────────────
+def extract_concepts_from_answer(answer, topic):
+    """Extract two key technical concepts from the inferential answer."""
+    prompt = f"""From this explanation about {topic}:
+"{answer}"
+
+Name exactly two technical concepts being discussed.
+Return ONLY: ConceptA | ConceptB
+No explanation."""
+    raw    = call_llm(prompt, temperature=0.1)
+    parts  = raw.split("|")
+    concept_a = parts[0].strip() if len(parts) > 0 else topic
+    concept_b = parts[1].strip() if len(parts) > 1 else "the alternative"
+    return concept_a, concept_b
+
 
 def rewrite_evaluative(q, a, chunk3, meta3, topic, difficulty, asked_questions):
-
     avoid = build_avoid_str(asked_questions)
-    rule = build_grounding_rule(meta3)
 
-    prompt = f"""
-    You are an expert teacher.
+    concept_a, concept_b = extract_concepts_from_answer(a, topic)
 
-    Topic: {topic}
-    Difficulty: {difficulty}
+    import random
+    frame = random.choice(EVALUATIVE_FRAMES).format(
+        A=concept_a, B=concept_b
+    )
 
-    Current Question:
-    {q}
+    code_inj, code_rule = build_code_injection(chunk3, meta3)
 
-    Current Answer:
-    {a}
+    diff_guide = {
+        "easy":         "The evaluation should be straightforward with one clear reason.",
+        "medium":       "The evaluation should weigh at least two considerations.",
+        "hard":         "The evaluation should involve nuanced tradeoffs and constraints.",
+        "basic":        "The evaluation should be straightforward with one clear reason.",
+        "intermediate": "The evaluation should weigh at least two considerations.",
+        "advanced":     "The evaluation should involve nuanced tradeoffs and constraints.",
+    }.get(difficulty, "The evaluation should weigh relevant tradeoffs.")
 
-    Additional Content:
-    {chunk3}
+    prompt = f"""You are an expert teacher.
 
-    Rewrite the question.
+Topic: {topic}
+Difficulty: {difficulty}
 
-    Rules:
-    - MUST involve comparison / justification
-    - MUST require reasoning
-    - Medium → simple reasoning
-    - Hard → critical evaluation
-    - MUST combine ALL concepts
-    - MUST NOT use external knowledge
-    - Answer must justify clearly (not generic)
-    {rule}
+Background the student knows:
+{a}
 
-    {avoid}
+Additional context:
+{chunk3[:400]}
+{code_inj}
 
-    Return ONLY valid JSON.
-    No unnecessary statements. Give only the JSON.
+Write ONE evaluative question using this structure as a guide:
+"{frame}"
 
-    {{
-    "question": "...",
-    "reference_answer": "..."
-    }}
-    """
+Question rules:
+- Must require the student to TAKE A POSITION, not just list facts
+- Must be answerable only with deep understanding of both concepts
+-DO NOT use general knowledge unless it appears in the content
+- Maximum 30 words
+- {diff_guide}
+{code_rule}
+
+Answer rules:
+- Must state a clear position in the first sentence
+- Must give at least 2 specific reasons supporting the position
+- Must acknowledge one limitation or counterpoint
+- Minimum 4 sentences
+
+{avoid}
+
+Return ONLY valid JSON:
+{{"question": "...", "reference_answer": "..."}}
+
+STRICT FORMAT:
+- No text before or after JSON
+- No "Here is the question"
+"""
+
     return parse_json(call_llm(prompt, temperature=0.7))
+
 
 # ─────────────────────────────────────────────
 # MAIN FUNCTION
@@ -613,10 +695,21 @@ def generate_question(topic, difficulty, question_type,
         s2 = subtopics[(question_count + 1) % len(subtopics)]
         s3 = subtopics[(question_count + 2) % len(subtopics)]
 
+        # selected = [
+        #     groups[s1][0],
+        #     groups[s2][0],
+        #     groups[s3][0]
+        # ]
+        def select_from_group(group, question_count, slot_idx):
+            if not group:
+                return None
+
+            idx = (question_count + slot_idx * 3) % len(group)
+            return group[idx]
         selected = [
-            groups[s1][0],
-            groups[s2][0],
-            groups[s3][0]
+            select_from_group(groups[s1], question_count, 0),
+            select_from_group(groups[s2], question_count, 1),
+            select_from_group(groups[s3], question_count, 2)
         ]
 
     # Extract text + metadata
@@ -781,7 +874,7 @@ if __name__ == "__main__":
     q, _ = generate_question(
         topic="Pointers to Class Members",
         difficulty="medium",
-        question_type="factual",
+        question_type="evaluative",
         question_count=0,
         asked_questions=[]
     )
