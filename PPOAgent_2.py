@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from actor_critic_network import ActorCriticNetwork
-from Actor_Critic_LSTM import ActorCriticLSTM
+from actor_critic_network import ActorCriticMLP, ActorCriticLSTM
+
 
 
 class PPOAgent:
@@ -48,7 +48,7 @@ class PPOAgent:
             self.ac_network = ActorCriticLSTM(num_topics=num_topics,
                                               num_actions=num_actions)
         else:
-            self.ac_network = ActorCriticNetwork(num_topics=num_topics,
+            self.ac_network = ActorCriticMLP(num_topics=num_topics,
                                                  num_actions=num_actions)
 
         self.simulator = Simulator(topic_difficulty=topics_difficulty)

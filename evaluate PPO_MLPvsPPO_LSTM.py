@@ -4,8 +4,8 @@ from collections import defaultdict
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from PPO_Agent_3 import PPOAgent
-from rulebased_1 import RuleBasedAgent
+from PPOAgent_2 import PPOAgent
+from rule_based_agent import RuleBasedAgent
 
 
 

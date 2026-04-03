@@ -4,9 +4,9 @@ from collections import defaultdict
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from PPO_Agent_1 import PPOAgent
+from PPOAgent_1 import PPOAgent
 from Agent import AdaptiveAgent
-from rulebased_1 import RuleBasedAgent
+from rule_based_agent import RuleBasedAgent
 
 
 def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student_nos=0):

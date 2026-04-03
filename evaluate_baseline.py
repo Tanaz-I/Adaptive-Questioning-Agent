@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 
 from Simulator import Simulator
-from rulebased_1 import RuleBasedAgent
+from rule_based_agent import RuleBasedAgent
 from knowledge_state import question_types
 
 
