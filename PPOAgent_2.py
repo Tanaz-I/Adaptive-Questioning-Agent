@@ -260,6 +260,8 @@ class PPOAgent:
         plt.title(f'Smoothed PPO Training Loss ({"LSTM" if self.use_lstm else "MLP"})')
         plt.xlabel('Episode')
         plt.ylabel('Loss')
+        plt.savefig(f"Results/TrainingLoss_PPO_({"LSTM" if self.use_lstm else "MLP"}).png")
+
 
         return total_losses
 

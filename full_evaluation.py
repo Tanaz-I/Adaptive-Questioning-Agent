@@ -5,7 +5,7 @@ from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
 from PPOAgent_2 import PPOAgent
-from Agent import AdaptiveAgent
+from Agent_1 import AdaptiveAgent
 from rule_based_agent import RuleBasedAgent
 
 
@@ -146,7 +146,7 @@ STYLE = {
 }
 
 
-def plot_score_progression(agent_labels, scores_all_list, save_path='Images/eval_compare.png'):
+def plot_score_progression(agent_labels, scores_all_list, save_path='Results/eval_compare.png'):
     plt.figure(figsize=(11, 5))
     for label, scores_all in zip(agent_labels, scores_all_list):
         mean_curve = np.mean(scores_all, axis=0)
@@ -163,7 +163,7 @@ def plot_score_progression(agent_labels, scores_all_list, save_path='Images/eval
 
 
 def plot_mastery_rates(topics, agent_labels, mastered_per_topic_list, n_students,
-                       save_path='Images/mastery_compare.png'):
+                       save_path='Results/mastery_compare.png'):
     n_agents = len(agent_labels)
     x        = np.arange(len(topics))
     width    = 0.8 / n_agents          # bars share the same unit width
@@ -188,7 +188,7 @@ def plot_mastery_rates(topics, agent_labels, mastered_per_topic_list, n_students
 
 
 def plot_smoothed_progression(agent_labels, scores_all_list, window=50,
-                               save_path='Images/eval_smoothed_compare.png'):
+                               save_path='Images/Results_smoothed_compare.png'):
     """Rolling-average smoothed score curves."""
     plt.figure(figsize=(11, 5))
     for label, scores_all in zip(agent_labels, scores_all_list):
@@ -226,15 +226,17 @@ def evaluate(topics_difficulty, prerequisites,
     simulator = Simulator(topic_difficulty=topics_difficulty)
 
     # ── Instantiate agents ────────────────────────────────────────────────────
+    print("Initialising REINFORCE+LSTM agent …")
+    reinforce_lstm_agent = AdaptiveAgent(topics_difficulty, prerequisites,
+                                                  w1=w1, w2=w2, w3=w3,use_lstm=True)
+    
     print("Initialising REINFORCE agent …")
     reinforce_agent = AdaptiveAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
 
     print("Initialising PPO agent …")
     ppo_agent = PPOAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
 
-    print("Initialising REINFORCE+LSTM agent …")
-    reinforce_lstm_agent = AdaptiveAgent(topics_difficulty, prerequisites,
-                                                  w1=w1, w2=w2, w3=w3,use_lstm=True)
+    
 
     print("Initialising PPO+LSTM agent …")
     ppo_lstm_agent = PPOAgent(topics_difficulty, prerequisites,
@@ -340,7 +342,7 @@ if __name__ == "__main__":
     evaluate(
         topics_difficulty,
         prerequisites,
-        w1=0.4, w2=0.5, w3=0.2,
+        w1=0.35, w2=0.45, w3=0.2,
         n_students=50,
-        n_questions=2000,
+        n_questions=1000,
     )
