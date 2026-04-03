@@ -12,7 +12,7 @@ from actor_critic_network import ActorCriticNetwork
 
 class PPOAgent:
     
-    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3, n_episodes= 3000, n_questions= 100, gamma= 0.99,
+    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3, n_episodes= 2000, n_questions= 500, gamma= 0.99,
         lam= 0.95,       
         clip_eps= 0.2,       
         ppo_epochs= 4,          
@@ -33,6 +33,7 @@ class PPOAgent:
         self.simulator = Simulator(topic_difficulty = topics_difficulty)
         self.ks = KnowledgeState(topics_difficulty = topics_difficulty, prerequisites = prerequisites, window_size = 10)
         self.optimizer = torch.optim.AdamW( self.ac_network.parameters(), lr = 1e-4)
+         
         self.pretrain(n_episodes =n_episodes, n_questions = n_questions)   
 
     def _build_action_mask(self):
@@ -43,18 +44,20 @@ class PPOAgent:
                 continue
             if (diff, qtype) in self.ks.get_valid_actions(topic):
                 mask[idx] = 0.0
+        
         return mask
 
     def select_action(self, state_vector, training= False):
         state  = torch.FloatTensor(state_vector)
         logits, value = self.ac_network(state)
+        
         mask   = self._build_action_mask()
         logits = logits + mask
         temperature = 1.0 if training else 0.7
         probs  = F.softmax(logits / temperature, dim=-1)
         dist   = torch.distributions.Categorical(probs)
         action = dist.sample()
-        return action.item(), dist.log_prob(action), dist.entropy(), value
+        return action.item(), dist.log_prob(action), dist.entropy(), value, mask
 
     def _compute_gae(self, rewards, values, dones):    
         advantages = []
@@ -87,7 +90,8 @@ class PPOAgent:
 
         for _ in range(n_questions):
             state_vector = self.ks.get_state_vector()
-            action_idx, log_prob, entropy, value = self.select_action(state_vector, training=True)
+            #mask = self._build_action_mask()
+            action_idx, log_prob, entropy, value,mask = self.select_action(state_vector, training=True)
             topic, difficulty, question_type = self.mdp.decode(action_idx)
             old_earned_diff  = self.ks.current_level[topic]['earned_diff_idx']
             old_earned_qtype = self.ks.current_level[topic]['earned_qtype_idx']
@@ -105,6 +109,7 @@ class PPOAgent:
             buf['values'].append(value.item())
             buf['entropies'].append(entropy.item())
             buf['dones'].append(0.0)   
+            buf['masks'].append(mask)
 
         buf['dones'][-1] = 1.0 
         return buf
@@ -113,6 +118,7 @@ class PPOAgent:
         states     = torch.FloatTensor(np.array(buf['states']))
         actions    = torch.LongTensor(buf['actions'])
         old_lp     = torch.FloatTensor(buf['log_probs'])
+        masks=torch.stack(buf['masks'])
 
         advantages, returns = self._compute_gae(buf['rewards'], buf['values'], buf['dones'])
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
@@ -124,7 +130,7 @@ class PPOAgent:
             indices = torch.randperm(n)
             for start in range(0, n, self.mini_batch):
                 idx = indices[start: start + self.mini_batch]
-
+                mask_batch=masks[idx]
                 s_batch   = states[idx]
                 a_batch   = actions[idx]
                 olp_batch = old_lp[idx]
@@ -132,8 +138,7 @@ class PPOAgent:
                 ret_batch = returns[idx]
 
                 logits, values = self.ac_network(s_batch)
-                mask = self._build_action_mask()
-                logits = logits + mask
+                logits = logits + mask_batch
                 dist      = torch.distributions.Categorical(F.softmax(logits, dim=-1))
                 new_lp    = dist.log_prob(a_batch)
                 entropy   = dist.entropy().mean()
@@ -153,10 +158,14 @@ class PPOAgent:
 
         return total_loss_val / (self.ppo_epochs * max(1, n // self.mini_batch))
 
-    def pretrain(self, n_episodes= 3000, n_questions= 100):
+    def pretrain(self, n_episodes= 1000, n_questions= 100,rollout_episodes=8):
         total_losses = []
-
-        for episode in range(n_episodes):
+        
+        base_entropy = 0.15
+        min_entropy  = 0.05
+        """for episode in range(n_episodes):
+            
+            self.entropy_coef = max(min_entropy, base_entropy * (1 - episode / n_episodes))
             buf  = self.run_episode(n_questions)
             loss = self.ppo_update(buf)
             total_losses.append(loss)
@@ -168,18 +177,45 @@ class PPOAgent:
                     f"Avg Loss: {avg_loss:.4f} | "
                     f"Avg Reward: {avg_reward:.4f}"
                 )
+        """       
+        episode = 0
+    
+        while episode < n_episodes:
+            # entropy annealing
+            self.entropy_coef = max(min_entropy, base_entropy * (1 - episode / n_episodes))
 
+            # collect from multiple episodes into one buffer
+            combined_buf = defaultdict(list)
+            for _ in range(rollout_episodes):
+                buf = self.run_episode(n_questions)
+                for key in buf:
+                    combined_buf[key].extend(buf[key])
+
+            loss = self.ppo_update(combined_buf)
+            total_losses.append(loss)
+            episode += rollout_episodes
+
+            if episode % 50 == 0:
+                avg_loss   = np.mean(total_losses[-50:])
+                avg_reward = np.mean(combined_buf['rewards'])
+                print(f"Episode {episode}/{n_episodes} | "
+                    f"Avg Loss: {avg_loss:.4f} | "
+                    f"Avg Reward: {avg_reward:.4f} | "
+                    f"Entropy Coef: {self.entropy_coef:.4f}"  # track annealing
+                )
+
+    
         window   = 50
         smoothed = np.convolve(total_losses, np.ones(window) / window, mode='valid')
         plt.plot(smoothed)
         plt.title('Smoothed PPO Training Loss')
         plt.xlabel('Episode')
         plt.ylabel('Loss')
-        plt.show()
+        #plt.show()
 
         return total_losses
 
-   
+
     def update(self, topic, score, difficulty, question_type):
         prev_score       = self.ks.topic_score[topic]
         old_earned_diff  = self.ks.current_level[topic]['earned_diff_idx']

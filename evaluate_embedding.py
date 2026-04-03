@@ -14,8 +14,7 @@ EMBED_MODELS = [
 
 # ── Eval queries — OOP slide content ─────────────────────────────────────────
 EVAL_QUERIES = [
-    {"query": "What is inheritance in object oriented programming?",
-     "keyword": "inherit"},
+    
     {"query": "Explain polymorphism with example",
      "keyword": "polymorphism"},
     {"query": "What is encapsulation?",

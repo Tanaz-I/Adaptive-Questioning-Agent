@@ -1,0 +1,24 @@
+PPO
+
+1.  Rollout_episodes + Entropy annealing - better result so far
+
+2.  Instead of shared hidden layer 2 , seperate sec layer for actor and critic. /but the result was poor.
+
+3.  Orthogonal weights Initialisation - better than 2, subjects related with neural netowrk had better mastery than reinforce
+
+4.  clip_eps=0.2 to 0.1- gradient descent had related increased, but nn got decreased
+
+5.  Changed entropy min annealing=0.05 from 0.02. ppo value decreased overall.
+
+6.  Rollout_episodes=8 , only neural is increased, better than 5
+
+7.  dropout=0.1, mini_batch=64, worked for 1000, but now for 3000
+
+final- rollout=8, 1000
+rollout=16, 1500
+have to check which is overall better
+
+for higher topics and prerequisite-
+rollout=16
+episodes=3000
+entropy= 0.02 to 0.08

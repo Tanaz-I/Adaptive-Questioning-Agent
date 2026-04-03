@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 
 class AdaptiveAgent:
 
-    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3, n_episodes=3000, n_questions=100):
+    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3, n_episodes=1000, n_questions=1000):
         self.mdp = MDP(list(topics_difficulty.keys()), difficulty_types = ['basic', 'intermediate', 'advanced'], q_types = ['factual', 'inferential', 'evaluative'], w1 = w1, w2 = w2, w3 = w3)
         self.policy_network  = PolicyNetwork(num_topics = len(topics_difficulty), num_actions = len(topics_difficulty) * 3 * 3)
         self.simulator = Simulator(topic_difficulty = topics_difficulty)
@@ -110,7 +110,7 @@ class AdaptiveAgent:
         self.ks.update(topic, score, difficulty, question_type)
         return self.mdp.compute_reward(self.ks, topic, score, prev_score, old_earned_diff, old_earned_qtype)
 
-    def pretrain(self, n_episodes=3000, n_questions=100, gamma=0.99):
+    def pretrain(self, n_episodes=1000, n_questions=100, gamma=0.99):
         total_losses = []
 
         for episode in range(n_episodes):
@@ -129,6 +129,6 @@ class AdaptiveAgent:
         plt.title('Smoothed Training Loss')
         plt.xlabel('Episode')
         plt.ylabel('Loss')
-        plt.show()
+        #plt.show()
 
         return total_losses

@@ -4,11 +4,12 @@ from collections import defaultdict
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from PPO_Agent import PPOAgent
+from PPO_Agent_1 import PPOAgent
 from Agent import AdaptiveAgent
+from rulebased_1 import RuleBasedAgent
 
 
-class RuleBasedAgent:
+"""class RuleBasedAgent:
     
     def __init__(self, topics_difficulty, prerequisites, w1, w2, w3):
         self.ks  = KnowledgeState(topics_difficulty=topics_difficulty, prerequisites = prerequisites, window_size=10)
@@ -61,7 +62,7 @@ class RuleBasedAgent:
                 'earned_diff_idx' : 0,
                 'earned_qtype_idx': 0
             }
-        self.ks.prev_topic = None
+        self.ks.prev_topic = None"""
 
 
 def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student_nos = 0):
@@ -155,14 +156,18 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     topics    = list(topics_difficulty.keys())
     simulator = Simulator(topic_difficulty=topics_difficulty)
     
-    print("Pretraining REINFORCE agent...")
-    reinforce_agent = AdaptiveAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
+    baseline_agent = RuleBasedAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
+    print("Pretraining done.\n")
     
     print("Pretraining PPO agent...")
     ppo_agent = PPOAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
+    
+    print("Pretraining REINFORCE agent...")
+    reinforce_agent = AdaptiveAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
+    
+    
 
-    baseline_agent = RuleBasedAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
-    print("Pretraining done.\n")
+    
 
     # storage
     baseline_scores_all         = []
@@ -275,8 +280,8 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('Images/eval_2.png', dpi=150)
-    plt.show()
+    plt.savefig('Images/eval_6.png', dpi=150)
+    #plt.show()
 
     # 2. Per-topic mastery rate bar chart
     reinforce_mastery_rates = [reinforce_mastered_per_topic[t] / n_students for t in topics]
@@ -295,13 +300,13 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     plt.title('Per-Topic Mastery Rate — RL Agent vs Baseline')
     plt.legend()
     plt.tight_layout()
-    plt.savefig('Images/mastery_2.png', dpi=150)
+    plt.savefig('Images/mastery_6.png', dpi=150)
     plt.show()
 
 
 
 if __name__ == "__main__":
-    topics_difficulty = {
+    """topics_difficulty = {
         "Neural Networks"     : "advanced",
         "Gradient Descent"    : "intermediate",
         "Backpropagation"     : "advanced",
@@ -315,6 +320,38 @@ if __name__ == "__main__":
         "Activation Functions": [],
         "Overfitting"         : ["Neural Networks"],
         "Backpropagation"     : ["Neural Networks", "Gradient Descent"]
-    }
+    }"""
+    
+    topics_difficulty = {
 
-    evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_students=50, n_questions=1000)
+    # Level 0
+    "Linear Algebra"     : "basic",
+    "Calculus"           : "basic",
+
+    # Level 1
+    "Probability"        : "basic",
+    "Optimization"       : "intermediate",
+
+    # Level 2
+    "Loss Functions"     : "intermediate",
+    "Gradient Descent"   : "intermediate",
+
+    # Level 3
+    "Neural Networks"    : "advanced"
+}
+
+    prerequisites = {
+
+    "Linear Algebra"   : [],
+    "Calculus"         : [],
+
+    "Probability"      : ["Linear Algebra"],
+    "Optimization"     : ["Calculus"],
+
+    "Loss Functions"   : ["Probability", "Calculus"],
+    "Gradient Descent" : ["Optimization"],
+
+    "Neural Networks"  : ["Loss Functions", "Gradient Descent"]
+}
+
+    evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.2, n_students=50, n_questions=2000)
