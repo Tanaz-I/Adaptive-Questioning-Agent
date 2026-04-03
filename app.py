@@ -2,6 +2,12 @@ from flask import Flask, render_template, request, jsonify
 import threading
 import os
 import requests
+import pytesseract
+
+# ─────────────────────────────────────────────
+# TESSERACT PATH (Windows)
+# ─────────────────────────────────────────────
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 app = Flask(__name__)
 
@@ -136,7 +142,8 @@ def run_pipeline():
         rl = AdaptiveAgent(
             topics_difficulty=topics_difficulty,
             prerequisites={t: [] for t in topics_difficulty},
-            w1=0.4, w2=0.5, w3=0.1
+            w1=0.4, w2=0.5, w3=0.1,
+            n_episodes=100
         )
 
         state["rl"] = rl
@@ -167,24 +174,42 @@ def get_question():
 
     rl = state["rl"]
 
-    # Use training=False like main.py
-    s = rl.ks.get_state_vector()
-    a, _, _ = rl.select_action(s, training=False)
-
-    topic, diff, qtype = rl.mdp.decode(a)
-
     from NLP.Q_Generator_A_Evaluator.question_generator import generate_question
 
-    nlp_diff = diff_map_rl_to_nlp[diff]
+    # Retry up to 5 times if no valid question is generated
+    for attempt in range(5):
+        s = rl.ks.get_state_vector()
+        a, _, _ = rl.select_action(s, training=False)
+        topic, diff, qtype = rl.mdp.decode(a)
 
-    result = generate_question(topic, nlp_diff, qtype)
+        nlp_diff = diff_map_rl_to_nlp[diff]
+        result, _ = generate_question(topic, nlp_diff, qtype)
 
+        print(f"[DEBUG] generate_question result keys: {list(result.keys()) if isinstance(result, dict) else result}")
+
+        print(result)
+        question  = result.get("question", "")
+        reference = result.get("reference_answer", "") or result.get("answer", "") or result.get("reference", "")
+
+        # Valid question — return it
+        if question and question not in ("No question generated", "No data", "Insufficient data", "Error", ""):
+            return {
+                "topic"     : topic,
+                "difficulty": diff,
+                "qtype"     : qtype,
+                "question"  : question,
+                "reference" : reference
+            }
+
+        print(f"[WARN] Attempt {attempt+1}: Invalid question '{question}', retrying...")
+
+    # All retries failed — return best effort
     return {
-        "topic"    : topic,
+        "topic"     : topic,
         "difficulty": diff,
-        "qtype"    : qtype,
-        "question" : result["question"],
-        "reference": result["reference_answer"]
+        "qtype"     : qtype,
+        "question"  : "Could not generate a question. Please click Next.",
+        "reference" : ""
     }
 
 

@@ -48,6 +48,8 @@ nltk.download("punkt")
 nltk.download("punkt_tab")
 from nltk.tokenize import sent_tokenize
 
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # Configuration
 
@@ -67,18 +69,21 @@ SUPPORTED_EXTS  = {".pptx", ".ppt", ".docx", ".doc", ".pdf", ".txt"}
 # reader = easyocr.Reader(['en'])
 
 
-tesseract_path = shutil.which("tesseract")
+# ─── FIXED: fall back to the hardcoded path if not found in system PATH ───
+tesseract_path = shutil.which("tesseract") or pytesseract.pytesseract.tesseract_cmd
 print(tesseract_path)
 
-if tesseract_path:
-    pytesseract.pytesseract.tesseract_cmd = tesseract_path
-else:
+if not tesseract_path or not Path(tesseract_path).exists():
     raise RuntimeError(
         "Tesseract not found. Please install it:\n"
         "Mac: brew install tesseract\n"
         "Ubuntu: sudo apt install tesseract-ocr\n"
         "Windows: https://github.com/tesseract-ocr/tesseract"
     )
+
+pytesseract.pytesseract.tesseract_cmd = tesseract_path
+# ──────────────────────────────────────────────────────────────────────────
+
 # Data model
 
 @dataclass
@@ -569,9 +574,9 @@ def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: 
     result = []
 
     for idx, text in enumerate(raw_chunks):
-        uid = hashlib.md5(
-            f"{file_path}::p{section['page_number']}::c{idx}".encode()
-        ).hexdigest()
+        # Use full text hash + counter to guarantee uniqueness
+        unique_str = f"{file_path}::p{section['page_number']}::c{idx}::{len(text)}::{text}"
+        uid = hashlib.md5(unique_str.encode()).hexdigest()
 
         result.append(Chunk(
             doc_id      = uid,
@@ -592,6 +597,18 @@ def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: 
 
 def store_in_vector_db(chunks: list[Chunk]) -> chromadb.Collection:
     """Embed all chunks and upsert into ChromaDB."""
+
+    # Deduplicate by doc_id before doing anything
+    seen_ids = set()
+    unique_chunks = []
+    for c in chunks:
+        if c.doc_id not in seen_ids:
+            seen_ids.add(c.doc_id)
+            unique_chunks.append(c)
+        else:
+            print(f"  [DEDUP] Skipping duplicate id: {c.doc_id}")
+    chunks = unique_chunks
+
     print(f"\n[VectorDB] Loading embedding model: {EMBED_MODEL}")
     model = SentenceTransformer(EMBED_MODEL)
 
@@ -749,7 +766,7 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
                     ocr_text = reconstruct_code_llm(ocr_text)
 
                 uid = hashlib.md5(
-                    f"{path}::img::{section['page_number']}::{len(ocr_text)}".encode()
+                    f"{path}::img::{section['page_number']}::{ocr_text}".encode()
                 ).hexdigest()
 
                 file_chunks.append(Chunk(
