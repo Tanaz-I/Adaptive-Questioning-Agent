@@ -226,6 +226,8 @@ session_log  = []
 combo_question_count = {}
 asked_questions_log = {}
 
+used_chunk_ids = [] #Not exact chunk ids but chunk text trimmed to some length
+MAX_MEM = 10
 for step in range(N_QUESTIONS):
 
     print(f"\n{'='*60}")
@@ -247,15 +249,19 @@ for step in range(N_QUESTIONS):
     question_count = combo_question_count.get(combo_key, 0)
     asked = asked_questions_log.get(topic, [])
     nlp_diff = diff_map_rl_to_nlp[diff]
-    result = generate_question(
+    result, new_ids = generate_question(
         topic,
         nlp_diff,
         qtype,
         question_count=question_count,
         asked_questions=asked,
         prerequisites=dependencies,
-        concept_graph=concept_graph
+        concept_graph=concept_graph,
+        used_chunk_ids = used_chunk_ids
     )
+    used_chunk_ids.extend(new_ids)
+    if len(used_chunk_ids) > MAX_MEM:
+        used_chunk_ids = used_chunk_ids[-MAX_MEM:]
 
     question         = result['question']
     reference_answer = result['reference_answer']

@@ -17,6 +17,18 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from rank_bm25 import BM25Okapi
 
+_CLIENT = None
+_COLLECTION = None
+
+_BM25_INDEX = None
+_CORPUS_DOCS = None
+_CORPUS_METAS = None
+
+DIFF_ORDER = {
+    'easy': 0, 'basic': 0,
+    'medium': 1, 'intermediate': 1,
+    'hard': 2, 'advanced': 2
+}
 
 # ─────────────────────────────────────────────
 # Configuration
@@ -39,23 +51,39 @@ embed_model = SentenceTransformer(EMBED_MODEL)
 # ─────────────────────────────────────────────
 # Connect to ChromaDB
 # ─────────────────────────────────────────────
-
 def connect_collection():
+    global _CLIENT, _COLLECTION
 
-    client = chromadb.PersistentClient(
-        path=CHROMA_DB_DIR,
-        settings=Settings(anonymized_telemetry=False)
-    )
+    if _COLLECTION is None:
+        _CLIENT = chromadb.PersistentClient(
+            path=CHROMA_DB_DIR,
+            settings=Settings(anonymized_telemetry=False)
+        )
+        try:
+            _COLLECTION = _CLIENT.get_collection(COLLECTION_NAME)
+        except Exception:
+            print("\nERROR: ChromaDB collection not found.")
+            print("Run these first:\n")
+            print("1) python knowledge_base_construction.py")
+            print("2) python enrich_metadata.py\n")
+            raise SystemExit(1)
 
-    try:
-        return client.get_collection(COLLECTION_NAME)
+    return _COLLECTION
 
-    except Exception:
-        print("\nERROR: ChromaDB collection not found.")
-        print("Run these first:\n")
-        print("1) python knowledge_base_construction.py")
-        print("2) python enrich_metadata.py\n")
-        raise SystemExit(1)
+def get_bm25_index():
+    global _BM25_INDEX, _CORPUS_DOCS, _CORPUS_METAS
+
+    if _BM25_INDEX is None:
+        collection = connect_collection()
+        data = collection.get(include=["documents", "metadatas"])
+
+        _CORPUS_DOCS = data["documents"]
+        _CORPUS_METAS = data["metadatas"]
+
+        tokenized = [doc.lower().split() for doc in _CORPUS_DOCS]
+        _BM25_INDEX = BM25Okapi(tokenized)
+
+    return _BM25_INDEX, _CORPUS_DOCS, _CORPUS_METAS
 
 
 # ─────────────────────────────────────────────
@@ -76,75 +104,125 @@ def build_filter(topic, difficulty):
 # Retrieve Chunks (FINAL VERSION)
 # ─────────────────────────────────────────────
 
-def build_bm25_index(collection):
-    data = collection.get(include=["documents", "metadatas"])
-    docs = data["documents"]
-    metas = data["metadatas"]
+# def build_bm25_index(collection):
+#     data = collection.get(include=["documents", "metadatas"])
+#     docs = data["documents"]
+#     metas = data["metadatas"]
 
-    tokenized = [doc.lower().split() for doc in docs]
-    bm25 = BM25Okapi(tokenized)
+#     tokenized = [doc.lower().split() for doc in docs]
+#     bm25 = BM25Okapi(tokenized)
 
-    return bm25, docs, metas
+#     return bm25, docs, metas
 
 def rrf_score(rank, k=60):
     return 1 / (k + rank)
 
-def expand_with_prereq_and_graph(topic, prerequisites, concept_graph):
+def expand_topic_smart_with_prereq_concept_graph(topic, prerequisites, concept_graph, collection):
+    """
+    Smart topic expansion:
+    - Expands ONLY if insufficient chunks exist
+    - Adds at most:
+        • 1 prerequisite
+        • 2 strongly connected graph neighbors
+    """
 
-    expanded = set([topic.lower()])
+    # ---- Step 1: count exact topic chunks ----
+    try:
+        results = collection.get(
+            where={"topic": topic},
+            include=["documents"]
+        )
+        n_exact = len(results.get("documents", []))
+    except Exception:
+        n_exact = 10  # assume sufficient → skip expansion
 
-    # ---- prerequisites ----
-    if prerequisites and topic in prerequisites:
-        for p in prerequisites[topic]:
-            expanded.add(p.lower())
+    expanded = [topic]
 
-    # ---- concept graph ----
-    if concept_graph:
-        from NLP.concept_graph import expand_topic
-        related = expand_topic(topic, concept_graph)
+    # ---- Step 2: expand ONLY if needed ----
+    if n_exact < 5:
 
-        for r in related:
-            expanded.add(r.lower())
+        # ---- add ONE prerequisite (most relevant = last) ----
+        if prerequisites:
+            prereqs = prerequisites.get(topic, [])
+            if prereqs:
+                expanded.append(prereqs[-1])
 
-    return list(expanded)
+        # ---- add top-2 graph neighbors (most connected) ----
+        if concept_graph:
+            topic_key = topic.lower()
 
-def retrieve_chunks(topic, difficulty, question_type, prerequisites=None, concept_graph=None, top_k=TOP_K):
+            if topic_key in concept_graph:
+                neighbors = list(concept_graph[topic_key])
+
+                # sort by connectivity (degree)
+                neighbors = sorted(
+                    neighbors,
+                    key=lambda n: len(concept_graph.get(n, [])),
+                    reverse=True
+                )
+
+                expanded.extend(neighbors[:2])
+
+    # ---- Step 3: deduplicate while preserving order ----
+    seen = set()
+    final = []
+
+    for t in expanded:
+        t_clean = t.strip()
+        if t_clean and t_clean not in seen:
+            seen.add(t_clean)
+            final.append(t_clean)
+
+    return final
+
+def difficulty_match_bonus(chunk_diff, requested_diff):
+    req = DIFF_ORDER.get(requested_diff, 1)
+    ch  = DIFF_ORDER.get(chunk_diff, 1)
+
+    distance = abs(req - ch)
+
+    # closer → higher bonus
+    if distance == 0:
+        return 0.08
+    elif distance == 1:
+        return 0.03
+    else:
+        return 0.0
+
+def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, prerequisites=None, concept_graph=None, top_k=TOP_K):
 
     collection = connect_collection()
-    bm25, corpus_docs, corpus_metas = build_bm25_index(collection)
+    bm25, corpus_docs, corpus_metas = get_bm25_index()
 
     # ─────────────────────────────────────────────
     # 1. Build richer query (QUERY EXPANSION)
     # ─────────────────────────────────────────────
-    expanded_topics = expand_with_prereq_and_graph(
+    expanded_topics = expand_topic_smart_with_prereq_concept_graph(
         topic,
         prerequisites,
-        concept_graph
+        concept_graph,
+        collection
     )
 
     query_variants = []
 
-    for t in expanded_topics:
+    query_variants = [
+        topic,
+        f"{topic} explanation",
+        f"{topic} example",
+        f"{topic} definition",
+        f"{topic} concepts",
+        f"{topic} applications"
+    ]
+
+    for t in expanded_topics[1:]:
         query_variants.extend([
             t,
             f"{t} explanation",
             f"{t} example",
             f"{t} definition",
-            f"{t} concepts",
-            f"{t} applications",
-            f"{t} {difficulty}",
-            f"{t} {question_type}"
         ])
-    # query_variants = [
-    #     topic,
-    #     f"{topic} explanation",
-    #     f"{topic} example",
-    #     f"{topic} definition",
-    #     f"{topic} concepts",
-    #     f"{topic} applications",
-    #     f"{topic} {difficulty}",
-    #     f"{topic} {question_type}"
-    # ]
+    
 
     # ─────────────────────────────────────────────
     # 2. Metadata filter (same as before)
@@ -276,6 +354,7 @@ def retrieve_chunks(topic, difficulty, question_type, prerequisites=None, concep
     # ─────────────────────────────────────────────
     final_chunks = []
     seen_subtopics = set()
+    seen_text_keys = set()
     # ─────────────────────────────────────────────
     # 5.1 Add metadata-based bonus (IMPORTANT)
     # ─────────────────────────────────────────────
@@ -289,21 +368,50 @@ def retrieve_chunks(topic, difficulty, question_type, prerequisites=None, concep
         elif concept == "example":
             bonus += 0.03
 
+        bonus += difficulty_match_bonus(c["meta"].get("difficulty"), difficulty)
+
         c["score"] += bonus
 
     # ─────────────────────────────────────────────
     # 5.2 Sort after boosting scores
     # ─────────────────────────────────────────────
     sorted_chunks = sorted(unique_chunks, key=lambda x: x["score"], reverse=True)
+    if used_chunk_ids is None:
+        used_chunk_ids = []
 
-    for c in sorted_chunks:
+    def chunk_key(text):
+        return text[:80].strip()
+
+    # ---- filter recent chunks ----
+    recent_set = set(used_chunk_ids)
+
+    fresh_chunks = [
+        c for c in sorted_chunks
+        if chunk_key(c["text"]) not in recent_set
+    ]
+
+    # fallback if too restrictive
+    if len(fresh_chunks) < 3:
+        fresh_chunks = sorted_chunks
+
+    for c in fresh_chunks:
 
         subtopic = c["meta"].get("subtopic", "") or "unknown"
+        if subtopic == "unknown":
+            print(c)
 
-        if subtopic not in seen_subtopics:
-            final_chunks.append(c)
+        if subtopic and subtopic != "Unknown":
+            if subtopic in seen_subtopics:
+                continue
             seen_subtopics.add(subtopic)
+        else:
+            # Fallback: dedup by first 60 chars of text
+            text_key = c["text"][:60].strip()
+            if text_key in seen_text_keys:
+                continue
+            seen_text_keys.add(text_key)
 
+        final_chunks.append(c)
         if len(final_chunks) >= top_k:
             break
 
@@ -331,27 +439,27 @@ def retrieve_chunks(topic, difficulty, question_type, prerequisites=None, concep
             "contains_example": meta.get('contains_example')
         })
 
-    return output
+    used_keys = [chunk_key(c["text"]) for c in final_chunks]
+
+    return output, used_keys
 
 def get_neighbor_chunks(chunk, window=1):
 
-    collection = connect_collection()
-    data = collection.get(include=["documents", "metadatas"])
-
-    neighbors = []
+    _, docs, metas = get_bm25_index()
 
     file_name = chunk.get("file_name")
     page = chunk.get("page_number")
-    print(chunk)
-    print('-----'*10)
-    print(page)
 
-    for doc, meta in zip(data["documents"], data["metadatas"]):
+    if not file_name or page is None:
+        return []
+
+    neighbors = []
+    for doc, meta in zip(docs, metas):
 
         if meta.get("file_name") != file_name:
             continue
 
-        page2 = meta.get("slide_number") or meta.get("page_number")
+        page2 = meta.get("page_number")
 
         if page2 is None:
             continue
@@ -410,6 +518,7 @@ if __name__ == "__main__":
 
     for i, c in enumerate(chunks, 1):
         print(f"Chunk {i}")
+        print(f"Text        : {c['text']}")
         print(f"Topic       : {c['topic']}")
         print(f"Subtopic    : {c['subtopic']}")
         print(f"Difficulty  : {c['difficulty']}")
@@ -418,3 +527,6 @@ if __name__ == "__main__":
         print(f"Text        : {c['text'][:150]}...\n")
 
     a = get_neighbor_chunks(chunk=chunks[0])
+    print(f'Ref page = {chunks[0].get("page_number")}')
+    for neighbour in a:
+        print(f"{neighbour['meta'].get('page_number')}")

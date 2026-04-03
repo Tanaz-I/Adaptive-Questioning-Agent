@@ -8,10 +8,10 @@ Advanced Question Generator (FINAL - MULTI-HOP VERSION)
 • Avoids repeated questions
 • Validation + fallback
 """
-
+# NLP.Q_Generator_A_Evaluator.
 import json
 import requests
-from NLP.Q_Generator_A_Evaluator.retrieval_engine import retrieve_chunks, get_neighbor_chunks
+from retrieval_engine import retrieve_chunks, get_neighbor_chunks
 import numpy as np
 
 
@@ -42,45 +42,119 @@ def call_llm(prompt, temperature=0.6):
 # ─────────────────────────────────────────────
 # Parse JSON
 # ─────────────────────────────────────────────
-
 def parse_json(output):
+    # print(output)
 
+    # ---- Clean output ----
+    output = output.replace("```", "")  # remove code fences
+
+    # ---- Try JSON first ----
     try:
         start = output.find("{")
         end = output.rfind("}") + 1
 
         if start != -1 and end > 0:
-            return json.loads(output[start:end])
+            data = json.loads(output[start:end])
 
+            question = data.get("question", "").strip()
+
+            # 🔥 handle broken keys
+            answer = data.get("reference_answer", "")
+
+            # fallback: find any long string value
+            if not answer:
+                for k, v in data.items():
+                    if isinstance(v, str) and len(v.split()) > 5:
+                        if k != "question":
+                            answer = v
+                            break
+
+            return {
+                "question": question,
+                "reference_answer": answer.strip()
+            }
     except:
         pass
 
-    
+    # ---- Fallback extraction ----
+    lines = [l.strip() for l in output.split("\n") if l.strip()]
+
     question = ""
     answer = ""
 
-    lines = output.split("\n")
-
+    # ---- Extract question ----
     for i, line in enumerate(lines):
+        if "?" in line:
+            # include previous lines if code exists
+            start_idx = max(0, i - 8)
+            question = "\n".join(lines[start_idx:i+1])
+            break
 
-        if "question" in line.lower():
-            if ":" in line:
-                question = line.split(":", 1)[1].strip()
-
+    # ---- Extract answer ----
+    for i, line in enumerate(lines):
         if "answer" in line.lower():
-            if ":" in line:
-                answer = line.split(":", 1)[1].strip()
+            answer = " ".join(lines[i: i+4])
+            break
 
-    # fallback safety
+    # fallback if not found
+    if not answer:
+        answer = " ".join(lines[-4:])
+
+    # safety
     if not question:
         question = "Error"
     if not answer:
         answer = "Error"
 
+    # clean unwanted prefixes
+    print(answer)
+    print(question)
+    question = question.replace('"question":', '').strip()
+    answer = answer.replace('"reference_answer":', '').strip()
+
     return {
         "question": question,
         "reference_answer": answer
     }
+
+# def parse_json(output):
+
+#     try:
+#         start = output.find("{")
+#         end = output.rfind("}") + 1
+
+#         if start != -1 and end > 0:
+#             return json.loads(output[start:end])
+
+#     except:
+#         pass
+
+    
+#     question = ""
+#     answer = ""
+
+#     lines = output.split("\n")
+
+#     for i, line in enumerate(lines):
+
+#         if "question" in line.lower():
+#             if ":" in line:
+#                 question = line.split(":", 1)[1].strip()
+
+#         if "answer" in line.lower():
+#             if ":" in line:
+#                 answer = line.split(":", 1)[1].strip()
+
+#     # fallback safety
+#     if not question:
+#         question = "Error"
+#     if not answer:
+#         answer = "Error"
+
+#     return {
+#         "question": question,
+#         "reference_answer": answer
+#     }
 
 
 # ─────────────────────────────────────────────
@@ -111,8 +185,108 @@ def validate(result, expected_type="factual"):
 
     return True
 
+def is_answerable(chunk, question):
+
+    prompt = f"""
+You are a strict evaluator.
+
+Content:
+{chunk[:500]}
+
+Question:
+{question}
+
+Can the answer be found directly in the content WITHOUT reasoning?
+
+Answer ONLY:
+YES or NO
+"""
+
+    out = call_llm(prompt, temperature=0)
+
+    return "YES" in out.upper()
+
+def generate_answer_with_llm(context, question):
+
+    prompt = f"""
+You are an expert teacher.
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer the question clearly.
+Answer the question clearly.
+
+
+Do NOT skip reasoning steps.
+
+Rules:
+- Use the context primarily
+- You may apply reasoning if needed
+- Do NOT say "not in context"
+- Be precise and correct
+
+Answer:
+"""
+
+    return call_llm(prompt, temperature=0.4)
+
 # def contains_code(text):
 #     return any(sym in text for sym in [";", "{", "}", "()", "class", "="])
+
+def extract_code_block(text):
+    CODE_SIGNALS = (
+        '{', '}', ';', '::', '->', 'def ', 'class ',
+        'public ', 'private ', 'return ', '#include',
+        'void ', 'int ', 'bool ', 'string ', '()',
+        '==', '!=', '+=', '-=', '<=', '>='
+    )
+
+    lines = text.split('\n')
+    code_lines = []
+    prose_lines = []
+
+    for line in lines:
+        is_code = (
+            any(sig in line for sig in CODE_SIGNALS) or
+            (len(line) > 2 and line[:2] == '  ' and line.strip())
+        )
+
+        if is_code:
+            code_lines.append(line)
+        else:
+            prose_lines.append(line)
+
+    return '\n'.join(code_lines).strip(), '\n'.join(prose_lines).strip()
+
+def build_code_injection(chunk, meta):
+    """
+    If chunk has code, extracts it and builds injection strings for prompts.
+    Returns (injection_block: str, instruction: str)
+    """
+    if not meta.get("contains_code") and meta.get("chunk_category") != "code":
+        return "", ""
+
+    code_block, _ = extract_code_block(chunk)
+    if not code_block or len(code_block.split()) < 4:
+        return "", ""
+
+    injection = f"""
+Code from the content (include this VERBATIM in the question):
+{code_block}
+"""
+    instruction = """
+    CRITICAL CODE RULES:
+    - Copy the code block above EXACTLY into your question using triple backticks
+    - Ask about a specific line, method, output, or behavior visible in the code
+    - The student must be able to answer solely by reading the code you show them
+    - NEVER describe code or ask about it without including it in the question text"""
+
+    return injection, instruction
+
 
 
 def is_mcq_format(q):
@@ -172,54 +346,57 @@ def build_grounding_rule(meta):
 # 1. Factual Question
 # ─────────────────────────────────────────────
 
-def generate_factual(chunk,meta, topic, difficulty, asked_questions):
+def generate_factual(chunk, meta, topic, difficulty, asked_questions):
+    avoid         = build_avoid_str(asked_questions)
+    code_inj, code_rule = build_code_injection(chunk, meta)
 
-    avoid = build_avoid_str(asked_questions)
-    rule = build_grounding_rule(meta)
+    # Difficulty-specific instruction
+    diff_guide = {
+        "easy":         "Ask for a direct definition or what something does.",
+        "medium":       "Ask about how a concept works or why it behaves a certain way.",
+        "hard":         "Ask about an edge case, a subtle distinction, or a tricky behavior.",
+        "basic":        "Ask for a direct definition or what something does.",
+        "intermediate": "Ask about how a concept works or why it behaves a certain way.",
+        "advanced":     "Ask about an edge case, a subtle distinction, or a tricky behavior.",
+    }.get(difficulty, "Ask about the main concept in the content.")
 
-    prompt = f"""
-    You are an expert teacher.
+    prompt = f"""You are an expert teacher creating an exam question.
 
-    Topic: {topic}
-    Difficulty: {difficulty}
+Topic: {topic}
+Difficulty: {difficulty}
 
-    Content:
-    {chunk}
+Content:
+{chunk}
+{code_inj}
 
-    Generate ONE factual question.
-    STRICT RULES:
-    - MUST NOT be a multiple choice question (MCQ)
-    - MUST NOT start with "Which of the following"
-    - MUST NOT include options like A), B), etc.
-    - MUST be a direct question (short answer)
-    - MUST be answerable in 1 to 3 sentences
-    - MUST NOT require guessing
-    Rules:
-    - Easy → direct definition
-    - Medium → concept understanding
-    - Hard → slightly tricky recall
-    - Question MUST be directly answerable from content
-    - Do NOT use outside knowledge
-    - Do NOT add extra explanation
-    - Answer must be complete and specific (not one word)
-    {rule}
+Task: Generate ONE factual question and its reference answer.
 
-    {avoid}
+Question rules:
+- {diff_guide}
+- MUST NOT be MCQ
+- MUST end with a question mark
+- MUST be directly answerable from the content above
+- Do NOT use outside knowledge
+{code_rule}
 
-    Return ONLY valid JSON.
-    No unnecessary statements. Give only the JSON.
+Answer rules:
+- Must be 2-4 complete sentences minimum
+- Must be specific, not generic ("it is used for...")
+- Must fully answer the question
 
-    {{
-    "question": "...",
-    "reference_answer": "..."
-    }}
-    """
-    return parse_json(call_llm(prompt, temperature=0.7))
+{avoid}
+
+Return ONLY valid JSON, no explanation, no markdown:
+{{"question": "...", "reference_answer": "..."}}"""
+
+    return parse_json(call_llm(prompt, temperature=0.6))
+
 
 def generate_mcq(context, meta, topic, difficulty, asked_questions):
 
     avoid = build_avoid_str(asked_questions)
     rule = build_grounding_rule(meta)
+    code_inj, code_rule = build_code_injection(context, meta)
 
     prompt = f"""
 You are an expert teacher.
@@ -229,13 +406,14 @@ Difficulty: {difficulty}
 
 Content:
 {context}
+{code_inj}
 
 Generate ONE MCQ question.
 
 Rules:
 - Question MUST be based on MAIN concept
 - Do NOT use outside knowledge
-- {rule}
+- {code_rule}
 - Question MUST use terms from content
 
 MCQ Rules:
@@ -270,6 +448,7 @@ def rewrite_inferential(q, a, chunk2, meta2, topic, difficulty, asked_questions)
 
     avoid = build_avoid_str(asked_questions)
     rule = build_grounding_rule(meta2)
+    code_inj, code_rule = build_code_injection(chunk2, meta2)
 
     prompt = f"""
     You are an expert teacher.
@@ -285,6 +464,7 @@ def rewrite_inferential(q, a, chunk2, meta2, topic, difficulty, asked_questions)
 
     Additional Content:
     {chunk2}
+    {code_inj}
 
     Rewrite the question.
 
@@ -298,7 +478,7 @@ def rewrite_inferential(q, a, chunk2, meta2, topic, difficulty, asked_questions)
     - Question must be concise (max 20 words)
     - Answer must combine BOTH contents clearly
     - Answer must be detailed (not short)
-    {rule}
+    {code_rule}
 
     {avoid}
 
@@ -381,7 +561,8 @@ def generate_question(topic, difficulty, question_type,
                       question_count=0,
                       asked_questions=None,
                       prerequisites=None,
-                      concept_graph=None):
+                      concept_graph=None,
+                      used_chunk_ids = None):
 
     if asked_questions is None:
         asked_questions = []
@@ -389,12 +570,13 @@ def generate_question(topic, difficulty, question_type,
     # ─────────────────────────────────────────────
     # Step 1: Retrieve chunks
     # ─────────────────────────────────────────────
-    chunks = retrieve_chunks(
+    chunks, new_keys = retrieve_chunks(
         topic,
         difficulty,
         question_type,
         prerequisites=prerequisites,
-        concept_graph=concept_graph
+        concept_graph=concept_graph,
+        used_chunk_ids = used_chunk_ids
     )
 
     if not chunks:
@@ -475,6 +657,15 @@ def generate_question(topic, difficulty, question_type,
 
         result = generate_mcq(text1, meta1, topic, difficulty, asked_questions)
 
+        if "options" in result:
+            # convert MCQ → normal format for pipeline
+            correct = result.get("correct_answer", "").lower()
+            options = result.get("options", {})
+
+            answer_text = options.get(correct, "")
+
+            result["reference_answer"] = answer_text
+
         if not is_valid_mcq(result):
             result = generate_factual(text1, meta1, topic, difficulty, asked_questions)
 
@@ -484,9 +675,18 @@ def generate_question(topic, difficulty, question_type,
     if not validate(result):
         result = generate_factual(text1, meta1, topic, difficulty, asked_questions)
 
+    if not is_answerable(text1, result["question"]):
+
+        print("[INFO] Answer not directly in content → using reasoning")
+
+        result["reference_answer"] = generate_answer_with_llm(
+            text1,
+            result["question"]
+        )
+
     if question_type == "factual":
         result["question_type"] = "factual"
-        return result
+        return result, new_keys
 
     # ─────────────────────────────────────────────
     # Step 4: Inferential
@@ -513,16 +713,21 @@ def generate_question(topic, difficulty, question_type,
             difficulty,
             asked_questions
         )
+    
+    result_inf["reference_answer"] = generate_answer_with_llm(
+        text1 + "\n\n" + text2,
+        result_inf["question"]
+    )
 
     # ── FINAL DECISION FOR INFERENTIAL ──
     if question_type == "inferential":
 
         if validate(result_inf):
             result_inf["question_type"] = "inferential"
-            return result_inf
+            return result_inf, new_keys
         else:
             result["question_type"] = "factual"
-            return result
+            return result, new_keys
     # ─────────────────────────────────────────────
     # Step 5: Evaluative
     # ─────────────────────────────────────────────
@@ -549,17 +754,23 @@ def generate_question(topic, difficulty, question_type,
             asked_questions
         )
 
+    
+    result_eval["reference_answer"] = generate_answer_with_llm(
+        text1 + "\n\n" + text2 + "\n\n" + text3,
+        result_eval["question"]
+    )
+
     # ── FINAL DECISION FOR EVALUATIVE ──
     if validate(result_eval):
         result_eval["question_type"] = "evaluative"
-        return result_eval
+        return result_eval, new_keys
 
     if validate(result_inf):
         result_inf["question_type"] = "inferential"
-        return result_inf
+        return result_inf, new_keys
 
     result["question_type"] = "factual"
-    return result
+    return result, new_keys
 
 # ─────────────────────────────────────────────
 # TEST
@@ -567,10 +778,10 @@ def generate_question(topic, difficulty, question_type,
 
 if __name__ == "__main__":
 
-    q = generate_question(
-        topic="Constructors and destructors",
+    q, _ = generate_question(
+        topic="Pointers to Class Members",
         difficulty="medium",
-        question_type="inferential",
+        question_type="factual",
         question_count=0,
         asked_questions=[]
     )
