@@ -22,7 +22,7 @@ class PPOAgent:
                  ppo_epochs=6,
                  mini_batch=128,
                  entropy_coef=0.12,
-                 value_coef=0.3,
+                 value_coef=0.5, #0.3
                  rollout_episodes=8,
                  use_lstm=False):
 
