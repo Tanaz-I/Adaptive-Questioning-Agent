@@ -13,6 +13,7 @@ Supported formats:
 Dependencies:
     pip install python-pptx pdfplumber python-docx \
                 chromadb sentence-transformers tqdm
+    pip install easyocr opencv-python pillow
     sudo apt install libreoffice -y   # for .ppt and .doc conversion
 
 Usage:
@@ -20,14 +21,22 @@ Usage:
 """
 
 import re
+import io
+import shutil
 import hashlib
 import subprocess
 from pathlib import Path
 from dataclasses import dataclass
+import json
+import requests
 
 import pdfplumber
 from pptx import Presentation
 from docx import Document as DocxDocument
+import pytesseract
+from PIL import Image
+import numpy as np
+import cv2
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
@@ -49,14 +58,27 @@ EMBED_MODEL     = "all-MiniLM-L6-v2"
 
 CHUNK_SIZE              = 500                 # Max characters per chunk
 CHUNK_OVERLAP           = 80                  # Overlap between chunks
-CHUNKING_STRATEGY       = "semantic"          # semantic or sentence
+CHUNKING_STRATEGY       = "sentence"          # semantic or sentence
 
 SEMANTIC_SIM_THRESHOLD  = 0.4
 
 # Supported extensions
 SUPPORTED_EXTS  = {".pptx", ".ppt", ".docx", ".doc", ".pdf", ".txt"}
+# reader = easyocr.Reader(['en'])
 
 
+tesseract_path = shutil.which("tesseract")
+print(tesseract_path)
+
+if tesseract_path:
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+else:
+    raise RuntimeError(
+        "Tesseract not found. Please install it:\n"
+        "Mac: brew install tesseract\n"
+        "Ubuntu: sudo apt install tesseract-ocr\n"
+        "Windows: https://github.com/tesseract-ocr/tesseract"
+    )
 # Data model
 
 @dataclass
@@ -70,6 +92,7 @@ class Chunk:
     section:      str           # Section/heading/slide title if available
     chunk_index:  int           # Index within the page/section
     total_chunks: int           # Total chunks from this page/section
+    is_image: bool
 
 
 # Legacy format conversion (.ppt / .doc -> modern)
@@ -99,6 +122,137 @@ def convert_legacy_files(docs_dir: str):
                 print(f"  [WARN] Conversion failed for {path.name}: {e}")
     if converted:
         print(f"  Converted {converted} legacy file(s).\n")
+
+# def ocr_image(image_bytes):
+
+#     try:
+#         np_arr = np.frombuffer(image_bytes, np.uint8)
+#         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+#         results = reader.readtext(img)
+#         text = " ".join([res[1] for res in results])
+
+#         return text.strip()
+
+#     except Exception:
+#         return ""
+    
+def ocr_image(image_bytes):
+    try:
+        import io
+        img = Image.open(io.BytesIO(image_bytes)).convert("L")
+        img = img.point(lambda x: 0 if x < 140 else 255, '1')
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+
+        text = pytesseract.image_to_string(img, config='--psm 6')
+
+        def clean_ocr_text(text):
+            lines = text.split("\n")
+
+            cleaned = [
+                l for l in lines
+                if not l.lower().startswith("here is")
+                and not l.lower().startswith("i fixed")
+            ]
+
+            return "\n".join(cleaned)
+        text = clean_ocr_text(text)
+        return text.strip()
+    except Exception as e:
+        print("[OCR ERROR]:", e)
+        return ""
+    
+def is_valid_ocr(text):
+    if len(text.split()) < 5:
+        return False
+
+    return True
+
+def detect_code(text):
+
+    lines = text.split("\n")
+    score = 0
+
+    for line in lines:
+        line = line.strip()
+
+        # STRONG indicators only
+        if (
+            line.startswith("class ") or
+            line.startswith("public ") or
+            line.startswith("private ") or
+            line.startswith("def ") or
+            line.startswith("#include") or
+            "::" in line or
+            "->" in line or
+            ("(" in line and ")" in line and "{" in line) or
+            ("=" in line and ";" in line)
+        ):
+            score += 2   # strong signal
+
+        # WEAK indicators
+        elif (
+            "{" in line or "}" in line or ";" in line
+        ):
+            score += 1
+
+    return score >= 3
+
+def detect_example(text):
+
+    text = text.lower()
+
+    patterns = [
+        "example",
+        "consider",
+        "suppose",
+        "let us",
+        "case",
+        "illustration"
+    ]
+
+    return any(p in text for p in patterns)
+
+def classify_chunk_llm(text):
+
+    prompt = f"""
+You are a classifier.
+
+Analyze the given text and classify it.
+
+Return ONLY JSON:
+
+{{
+  "contains_code": true/false,
+  "contains_example": true/false
+}}
+
+Rules:
+- Code = programming structure, syntax, functions, class, etc.
+- Example = explanation using a case, illustration, or scenario
+
+Text:
+{text[:800]}
+"""
+
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "llama3:8b",
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0}
+        }
+    )
+
+    try:
+        output = response.json()["response"]
+        start = output.find("{")
+        end = output.rfind("}") + 1
+        result = json.loads(output[start:end])
+        return result
+    except:
+        return {"contains_code": False, "contains_example": False}
 
 
 # Text extraction — per format
@@ -152,10 +306,22 @@ def _extract_pptx(path: Path) -> list[dict]:
         if notes:
             parts.append(f"Speaker Notes: {notes}")
 
+        images = []
+
+        # extract images from slide
+        for shape in slide.shapes:
+            if shape.shape_type == 13:  # picture
+                try:
+                    image_bytes = shape.image.blob
+                    images.append(image_bytes)
+                except Exception:
+                    pass
+
         slides.append({
             "page_number": idx,
             "section":     title,
             "text":        "\n\n".join(parts).strip(),
+            "images":      images   
         })
     return slides
 
@@ -415,6 +581,7 @@ def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: 
             file_type   = file_type,
             page_number = section["page_number"],
             section     = section["section"],
+            is_image    = False,
             chunk_index = idx,
             total_chunks= total,
         ))
@@ -444,23 +611,48 @@ def store_in_vector_db(chunks: list[Chunk]) -> chromadb.Collection:
     BATCH = 500
     print(f"[VectorDB] Upserting into '{COLLECTION_NAME}' ...")
     for i in tqdm(range(0, len(chunks), BATCH), desc="Batches"):
+
         batch = chunks[i : i + BATCH]
+
+        metadatas = []
+
+        for c in batch:
+
+            contains_code = detect_code(c.text)
+            contains_example = detect_example(c.text)
+
+            if  len(c.text) > 60:
+
+                classification = classify_chunk_llm(c.text)
+
+                # safer access (avoid crashes)
+                contains_code = contains_code or classification.get("contains_code", False)
+                contains_example = contains_example or classification.get("contains_example", False)
+
+            # ---------- STEP 3: BUILD METADATA ----------
+            meta = {
+                "file_name":    c.file_name,
+                "file_path":    c.file_path,
+                "file_type":    c.file_type,
+                "page_number":  c.page_number,
+                "section":      c.section,
+                "chunk_index":  c.chunk_index,
+                "total_chunks": c.total_chunks,
+
+                "source": "image" if c.is_image == True else "text",
+
+                "contains_code": contains_code,
+                "contains_example": contains_example,
+            }
+
+            metadatas.append(meta)
+
+        # ---------- UPSERT ----------
         collection.upsert(
-            ids        = [c.doc_id      for c in batch],
-            documents  = [c.text        for c in batch],
+            ids        = [c.doc_id for c in batch],
+            documents  = [c.text for c in batch],
             embeddings = embeddings[i : i + BATCH].tolist(),
-            metadatas  = [
-                {
-                    "file_name":    c.file_name,
-                    "file_path":    c.file_path,
-                    "file_type":    c.file_type,
-                    "page_number":  c.page_number,
-                    "section":      c.section,
-                    "chunk_index":  c.chunk_index,
-                    "total_chunks": c.total_chunks,
-                }
-                for c in batch
-            ],
+            metadatas  = metadatas
         )
 
     print(f"[VectorDB] {collection.count()} total documents in collection.\n")
@@ -468,6 +660,34 @@ def store_in_vector_db(chunks: list[Chunk]) -> chromadb.Collection:
 
 
 # Main pipeline
+
+def reconstruct_code_llm(text):
+
+    prompt = f"""
+The following is OCR-extracted code and may be corrupted.
+
+Fix syntax, formatting, and structure.
+
+Return ONLY corrected code.
+Dont give the changes. Return only the code.
+
+{text}
+"""
+
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "llama3:8b",
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0}
+        }
+    )
+
+    try:
+        return response.json()["response"].strip()
+    except:
+        return text
 
 def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
     print(f"\n{'='*58}")
@@ -510,9 +730,40 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
         for section in sections:
             if not section["text"].strip():
                 continue
+            # ---------- TEXT CHUNKS ----------
             file_chunks.extend(
                 section_to_chunks(section, path.name, str(path.resolve()), file_type)
             )
+
+            # ---------- IMAGE CHUNKS ----------
+            images = section.get("images", [])
+
+            for img_bytes in images:
+
+                ocr_text = ocr_image(img_bytes)
+                test = is_valid_ocr(ocr_text)
+                print(test)
+                if not test:
+                    continue
+                if detect_code(ocr_text) and len(ocr_text.split()) > 8:
+                    ocr_text = reconstruct_code_llm(ocr_text)
+
+                uid = hashlib.md5(
+                    f"{path}::img::{section['page_number']}::{len(ocr_text)}".encode()
+                ).hexdigest()
+
+                file_chunks.append(Chunk(
+                    doc_id       = uid,
+                    text         = ocr_text,
+                    file_name    = path.name,
+                    file_path    = str(path.resolve()),
+                    file_type    = file_type,
+                    page_number  = section["page_number"],
+                    section      = section["section"],
+                    is_image     = True,
+                    chunk_index  = -1,
+                    total_chunks = -1,
+                ))
         tqdm.write(
             f"  {path.name:45s}  {len(sections):4d} sections  ->  {len(file_chunks):4d} chunks"
         )
@@ -532,4 +783,58 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
 
 
 if __name__ == "__main__":
-    run_pipeline()
+
+    collection = run_pipeline()
+
+    print("\n========== DEBUG: VERIFYING DATA ==========\n")
+
+    # Fetch stored data
+    data = collection.get(include=["documents", "metadatas"])
+
+    docs = data["documents"]
+    metas = data["metadatas"]
+
+    print(f"Total stored chunks: {len(docs)}\n")
+
+    # Count types
+    image_indices = [i for i, m in enumerate(metas) if m.get("source") == "image"]
+    text_indices  = [i for i, m in enumerate(metas) if m.get("source") == "text"]
+
+    print(f"Text chunks  : {len(text_indices)}")
+    print(f"Image chunks : {len(image_indices)}\n")
+
+    # Code / example stats
+    code_count = sum(1 for m in metas if m.get("contains_code"))
+    example_count = sum(1 for m in metas if m.get("contains_example"))
+
+    print(f"Code chunks     : {code_count}")
+    print(f"Example chunks  : {example_count}\n")
+
+    # ---------- VIEW IMAGE CHUNKS ----------
+    print("\n========== IMAGE CHUNKS (OCR OUTPUT) ==========\n")
+
+    if not image_indices:
+        print("No image chunks found ❌\n")
+    else:
+        for idx in image_indices[:5]:   # show first 5 images
+            print(f"\n--- Image Chunk {idx} ---")
+            print("TEXT:\n", docs[idx][:500])   # OCR content
+            print("META:", metas[idx])
+
+    # ---------- VIEW CODE CHUNKS ----------
+    print("\n========== CODE CHUNKS ==========\n")
+
+    code_indices = [i for i, m in enumerate(metas) if m.get("contains_code")]
+
+    for idx in code_indices[:5]:
+        print(f"\n--- Code Chunk {idx} ---")
+        print("TEXT:\n", docs[idx][:500])
+        print("META:", metas[idx])
+
+    # ---------- VIEW RANDOM SAMPLE ----------
+    print("\n========== RANDOM SAMPLE ==========\n")
+
+    for i in range(min(5, len(docs))):
+        print(f"\n--- Chunk {i} ---")
+        print("TEXT:\n", docs[i][:300])
+        print("META:", metas[i])

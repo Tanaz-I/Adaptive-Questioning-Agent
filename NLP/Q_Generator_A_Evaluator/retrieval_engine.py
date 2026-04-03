@@ -7,12 +7,15 @@ Retrieves relevant chunks from ChromaDB using:
 • Difficulty filtering
 • Semantic similarity ranking
 
+Requirements : pip install rank_bm25
+
 Author: Member 2
 """
 
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
+from rank_bm25 import BM25Okapi
 
 
 # ─────────────────────────────────────────────
@@ -60,21 +63,11 @@ def connect_collection():
 # ─────────────────────────────────────────────
 
 def build_filter(topic, difficulty):
-    """
-    Matches:
-    - topic OR subtopic
-    - AND difficulty
-    """
 
     return {
-        "$and": [
-            {
-                "$or": [
-                    {"topic": topic},
-                    {"subtopic": topic}
-                ]
-            },
-            {"difficulty": difficulty}
+        "$or": [
+            {"topic": topic},
+            {"subtopic": topic}
         ]
     }
 
@@ -83,23 +76,75 @@ def build_filter(topic, difficulty):
 # Retrieve Chunks (FINAL VERSION)
 # ─────────────────────────────────────────────
 
-def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
+def build_bm25_index(collection):
+    data = collection.get(include=["documents", "metadatas"])
+    docs = data["documents"]
+    metas = data["metadatas"]
+
+    tokenized = [doc.lower().split() for doc in docs]
+    bm25 = BM25Okapi(tokenized)
+
+    return bm25, docs, metas
+
+def rrf_score(rank, k=60):
+    return 1 / (k + rank)
+
+def expand_with_prereq_and_graph(topic, prerequisites, concept_graph):
+
+    expanded = set([topic.lower()])
+
+    # ---- prerequisites ----
+    if prerequisites and topic in prerequisites:
+        for p in prerequisites[topic]:
+            expanded.add(p.lower())
+
+    # ---- concept graph ----
+    if concept_graph:
+        from NLP.concept_graph import expand_topic
+        related = expand_topic(topic, concept_graph)
+
+        for r in related:
+            expanded.add(r.lower())
+
+    return list(expanded)
+
+def retrieve_chunks(topic, difficulty, question_type, prerequisites=None, concept_graph=None, top_k=TOP_K):
 
     collection = connect_collection()
+    bm25, corpus_docs, corpus_metas = build_bm25_index(collection)
 
     # ─────────────────────────────────────────────
     # 1. Build richer query (QUERY EXPANSION)
     # ─────────────────────────────────────────────
-    query_variants = [
+    expanded_topics = expand_with_prereq_and_graph(
         topic,
-        f"{topic} explanation",
-        f"{topic} example",
-        f"{topic} definition",
-        f"{topic} concepts",
-        f"{topic} applications",
-        f"{topic} {difficulty}",
-        f"{topic} {question_type}"
-    ]
+        prerequisites,
+        concept_graph
+    )
+
+    query_variants = []
+
+    for t in expanded_topics:
+        query_variants.extend([
+            t,
+            f"{t} explanation",
+            f"{t} example",
+            f"{t} definition",
+            f"{t} concepts",
+            f"{t} applications",
+            f"{t} {difficulty}",
+            f"{t} {question_type}"
+        ])
+    # query_variants = [
+    #     topic,
+    #     f"{topic} explanation",
+    #     f"{topic} example",
+    #     f"{topic} definition",
+    #     f"{topic} concepts",
+    #     f"{topic} applications",
+    #     f"{topic} {difficulty}",
+    #     f"{topic} {question_type}"
+    # ]
 
     # ─────────────────────────────────────────────
     # 2. Metadata filter (same as before)
@@ -144,8 +189,9 @@ def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
             })
 
     # ─────────────────────────────────────────────
-    # 4. Deduplication
+    # 4. Deduplication (MANDATORY BEFORE RRF)
     # ─────────────────────────────────────────────
+
     seen = set()
     unique_chunks = []
 
@@ -155,6 +201,75 @@ def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
         if key not in seen:
             seen.add(key)
             unique_chunks.append(c)
+
+
+    # ─────────────────────────────────────────────
+    # 4.5 BM25 Retrieval + RRF Fusion
+    # ─────────────────────────────────────────────
+
+    # ---- BM25 retrieval ----
+    query_tokens = " ".join(expanded_topics + ["concepts", "usage", "working"]).lower().split()
+
+    bm25_scores = bm25.get_scores(query_tokens)
+
+    bm25_ranked_indices = sorted(
+        range(len(bm25_scores)),
+        key=lambda i: bm25_scores[i],
+        reverse=True
+    )[:top_k * 3]
+
+    bm25_results = []
+
+    for rank, idx in enumerate(bm25_ranked_indices):
+        bm25_results.append({
+            "text": corpus_docs[idx],
+            "meta": corpus_metas[idx],
+            "score": 0,            # will be updated
+            "bm25_rank": rank
+        })
+
+
+    # ---- RRF Fusion ----
+    rrf_scores = {}
+
+    # embedding ranking
+    for rank, c in enumerate(unique_chunks):
+        key = c["text"]
+        rrf_scores[key] = rrf_score(rank)
+
+    # BM25 ranking
+    for rank, c in enumerate(bm25_results):
+        key = c["text"]
+        rrf_scores[key] = rrf_scores.get(key, 0) + rrf_score(rank)
+
+
+    # ---- Merge embedding + BM25 chunks ----
+    combined_chunks = {}
+
+    # add embedding chunks
+    for c in unique_chunks:
+        combined_chunks[c["text"]] = c
+
+    # add BM25-only chunks
+    for c in bm25_results:
+        if c["text"] not in combined_chunks:
+            combined_chunks[c["text"]] = {
+                "text": c["text"],
+                "meta": c["meta"],
+                "score": 0
+            }
+
+
+    # ---- Assign fused score ----
+    fused_chunks = []
+
+    for text, c in combined_chunks.items():
+        c["score"] += rrf_scores.get(text, 0)
+        fused_chunks.append(c)
+
+
+    
+    unique_chunks = fused_chunks
 
     # ─────────────────────────────────────────────
     # 5. Diversity selection (MMR-style)
@@ -208,13 +323,46 @@ def retrieve_chunks(topic, difficulty, question_type, top_k=TOP_K):
             "concept_type": meta.get("concept_type"),
             "keywords": meta.get("keywords"),
             "file_name": meta.get("file_name"),
-            "slide_number": meta.get("slide_number"),
-            "slide_title": meta.get("slide_title"),
+            "page_number": meta.get("page_number"),
+            "section": meta.get("section"),
             "similarity_score": round(c["score"], 4),
-            "retrieval_source": "multi_query_mmr"
+            "retrieval_source": "multi_query_mmr",
+            "contains_code": meta.get('contains_code'),
+            "contains_example": meta.get('contains_example')
         })
 
     return output
+
+def get_neighbor_chunks(chunk, window=1):
+
+    collection = connect_collection()
+    data = collection.get(include=["documents", "metadatas"])
+
+    neighbors = []
+
+    file_name = chunk.get("file_name")
+    page = chunk.get("page_number")
+    print(chunk)
+    print('-----'*10)
+    print(page)
+
+    for doc, meta in zip(data["documents"], data["metadatas"]):
+
+        if meta.get("file_name") != file_name:
+            continue
+
+        page2 = meta.get("slide_number") or meta.get("page_number")
+
+        if page2 is None:
+            continue
+
+        if abs(page2 - page) <= window:
+            neighbors.append({
+                "text": doc,
+                "meta": meta
+            })
+
+    return neighbors
 
 
 # ─────────────────────────────────────────────
@@ -247,7 +395,7 @@ if __name__ == "__main__":
 
     # TEST 2: Subtopic-based (IMPORTANT)
     chunks = retrieve_chunks(
-    topic="Constructors and destructors",
+    topic="Pointers to Class Members",
     difficulty="medium",
     question_type="inferential")
 
@@ -266,5 +414,7 @@ if __name__ == "__main__":
         print(f"Subtopic    : {c['subtopic']}")
         print(f"Difficulty  : {c['difficulty']}")
         print(f"Similarity  : {c['similarity_score']}")
-        print(f"Slide Title : {c['slide_title']}")
+        print(f"Slide Title : {c['section']}")
         print(f"Text        : {c['text'][:150]}...\n")
+
+    a = get_neighbor_chunks(chunk=chunks[0])

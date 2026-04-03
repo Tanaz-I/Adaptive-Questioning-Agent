@@ -4,22 +4,24 @@ import json
 import requests
 from collections import Counter, defaultdict
 from Adaptation_RL.Agent import AdaptiveAgent
-from NLP import knowledge_base_construction, enrich_metadata, rag_query_engine
+from NLP import knowledge_base_construction, enrich_metadata, rag_query_engine, topic_extraction
 from NLP.Q_Generator_A_Evaluator.answer_evaluator import evaluate_answer
 from NLP.Q_Generator_A_Evaluator.question_generator import generate_question
+from NLP.concept_graph import build_concept_graph
 
 DOCS_DIR        = "./contents"
 CHROMA_DB_DIR   = "./chroma_db"
 COLLECTION_NAME = "rag_kb"
 OLLAMA_URL      = "http://localhost:11434/api/generate"
-OLLAMA_MODEL    = "qwen2.5:1.5b-instruct"
+OLLAMA_MODEL    = "llama3:8b"
 
 # ─────────────────────────────────────────────
 # Step 1 — Build Knowledge Base
 # ─────────────────────────────────────────────
 
-# knowledge_base_construction.run_pipeline(DOCS_DIR)
-# collection = enrich_metadata.enrich_metadata()
+knowledge_base_construction.run_pipeline(DOCS_DIR)
+enrich_metadata.enrich_metadata()
+topic_extraction.run_global_topic_extraction()
 
 client = chromadb.PersistentClient(
     path=CHROMA_DB_DIR,
@@ -86,6 +88,7 @@ Rules (STRICT):
 
 Return ONLY a JSON object where every key is from the valid topics list.
 Return ONLY valid JSON. No explanation, no markdown.
+No unnecessary statements. Give only the JSON.
 
 JSON:"""
 
@@ -125,6 +128,32 @@ def safe_parse_json(raw, fallback):
 dependencies = safe_parse_json(response.json()["response"], fallback={})
 print(f"Prerequisites: {dependencies}")
 
+data = collection.get(include=["documents", "metadatas"])
+filtered_chunks = []
+
+for doc, meta in zip(data["documents"], data["metadatas"]):
+
+    if meta.get("topic") in (None, "", "Unknown"):
+        continue
+
+    # prioritize useful chunks
+    if meta.get("concept_type") in ["definition", "explanation", "example"]:
+        filtered_chunks.append({
+            "text": doc,
+            "topic": meta.get("topic"),
+            "subtopic": meta.get("subtopic")
+        })
+
+filtered_chunks = filtered_chunks[:150]
+
+concept_graph = build_concept_graph(filtered_chunks)
+print(f"[Graph] Nodes: {len(concept_graph)}")
+
+sample_keys = list(concept_graph.keys())[:5]
+print("[Graph Sample]:", sample_keys)
+
+print("[Graph] Done.\n")
+
 # ─────────────────────────────────────────────
 # Step 5 — Compute Topic Difficulty (mode)
 # ─────────────────────────────────────────────
@@ -136,6 +165,18 @@ for m in all_meta:
     if not topic or topic == "Unknown" or not difficulty:
         continue
     topic_difficulties_raw.setdefault(topic, []).append(difficulty)
+
+valid_topics = set(topic_difficulties_raw.keys())
+
+clean_dependencies = {}
+
+for topic, prereqs in dependencies.items():
+    filtered = [p for p in prereqs if p in valid_topics and p != topic]
+    clean_dependencies[topic] = filtered
+
+dependencies = clean_dependencies
+
+print("\n[Fixed Prerequisites]:", dependencies)
 
 # map NLP difficulty labels → RL difficulty labels
 diff_map_nlp_to_rl = {
@@ -182,6 +223,8 @@ diff_map_rl_to_nlp = {
 
 N_QUESTIONS  = 10
 session_log  = []
+combo_question_count = {}
+asked_questions_log = {}
 
 for step in range(N_QUESTIONS):
 
@@ -199,8 +242,20 @@ for step in range(N_QUESTIONS):
     print(f"Type       : {qtype}")
 
     # ── 7b. RAG generates question ───────────────────────────
+    combo_key = (topic, diff, qtype)
+
+    question_count = combo_question_count.get(combo_key, 0)
+    asked = asked_questions_log.get(topic, [])
     nlp_diff = diff_map_rl_to_nlp[diff]
-    result   = generate_question(topic, nlp_diff, qtype)
+    result = generate_question(
+        topic,
+        nlp_diff,
+        qtype,
+        question_count=question_count,
+        asked_questions=asked,
+        prerequisites=dependencies,
+        concept_graph=concept_graph
+    )
 
     question         = result['question']
     reference_answer = result['reference_answer']
@@ -210,6 +265,7 @@ for step in range(N_QUESTIONS):
         continue
 
     print(f"\nQuestion:\n{question}")
+    print(f"\n[Reference Answer]:\n{reference_answer}")
 
     # ── 7c. Get student answer ───────────────────────────────
     print("\nYour answer:")
@@ -253,6 +309,12 @@ for step in range(N_QUESTIONS):
         'mastered'      : mastered[:]
     })
 
+    combo_question_count[combo_key] = question_count + 1
+
+    if topic not in asked_questions_log:
+        asked_questions_log[topic] = []
+
+    asked_questions_log[topic].append(result["question"])
 # ─────────────────────────────────────────────
 # Step 8 — Session Summary
 # ─────────────────────────────────────────────
