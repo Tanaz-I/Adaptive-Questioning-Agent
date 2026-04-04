@@ -11,33 +11,14 @@ from policy_network_1 import PolicyNetworkMLP, PolicyNetworkLSTM
 
 
 class AdaptiveAgent:
-    """
-    REINFORCE agent that uses either an MLP or LSTM policy network.
-
-    Parameters
-    ----------
-    use_lstm    : bool  – True  → LSTM backbone
-                          False → MLP backbone  (original behaviour)
-    hidden_size : int   – LSTM hidden dimension  (ignored when use_lstm=False)
-    num_layers  : int   – number of LSTM layers  (ignored when use_lstm=False)
-
-    Usage
-    -----
-    # MLP  (original)
-    agent = AdaptiveAgent(topics_difficulty, prerequisites, w1, w2, w3)
-
-    # LSTM
-    agent = AdaptiveAgent(topics_difficulty, prerequisites, w1, w2, w3,
-                          use_lstm=True, hidden_size=128, num_layers=1)
-    """
 
     def __init__(self, topics_difficulty, prerequisites,
                  w1, w2, w3,
-                 use_lstm: bool = False,
-                 hidden_size: int = 128,
-                 num_layers: int = 1,
-                 n_episodes: int = 1000,
-                 n_questions: int = 500):
+                 use_lstm= False,
+                 hidden_size= 128,
+                 num_layers = 1,
+                 n_episodes = 1000,
+                 n_questions = 500):
 
         self.use_lstm  = use_lstm
         num_topics     = len(topics_difficulty)
@@ -56,7 +37,7 @@ class AdaptiveAgent:
             window_size=10,
         )
 
-        # ── Choose network ────────────────────────────────────────────────────
+       
         if use_lstm:
             self.policy_network = PolicyNetworkLSTM(
                 num_topics=num_topics,
@@ -73,8 +54,7 @@ class AdaptiveAgent:
         self.optimizer = torch.optim.AdamW(self.policy_network.parameters(), lr=1e-4)
         self.pretrain(n_episodes=n_episodes, n_questions=n_questions)
 
-    # ── Internal helpers ──────────────────────────────────────────────────────
-
+    
     def _build_action_mask(self):
         mask = torch.full((self.mdp.n_actions,), float('-inf'))
         for idx in range(self.mdp.n_actions):
@@ -102,7 +82,6 @@ class AdaptiveAgent:
         self.ks.prev_topic = None
         self.policy_network.reset_hidden()   # no-op for MLP, resets (h,c) for LSTM
 
-    # ── Action selection ──────────────────────────────────────────────────────
 
     def select_action(self, state_vector, training: bool = False):
         state         = torch.FloatTensor(state_vector)
@@ -115,7 +94,6 @@ class AdaptiveAgent:
         action        = dist.sample()
         return action.item(), dist.log_prob(action), dist.entropy()
 
-    # ── Episode runner ────────────────────────────────────────────────────────
 
     def run_episode(self, n_questions: int = 25):
         self.simulator.reset_mastery_scores()
@@ -149,8 +127,7 @@ class AdaptiveAgent:
 
         return log_probs, rewards, entropies
 
-    # ── Policy update ─────────────────────────────────────────────────────────
-
+  
     def update_policy_pretrain(self, log_probs, rewards, entropies,
                                gamma: float = 0.99, entropy_coef: float = 0.1):
         G = 0
@@ -171,10 +148,8 @@ class AdaptiveAgent:
         self.optimizer.step()
         return loss.item()
 
-    # ── Public API called during evaluation ───────────────────────────────────
 
     def update(self, topic, score, difficulty, question_type):
-        """Called by the evaluation harness after each question."""
         prev_score       = self.ks.topic_score[topic]
         old_earned_diff  = self.ks.current_level[topic]['earned_diff_idx']
         old_earned_qtype = self.ks.current_level[topic]['earned_qtype_idx']
@@ -185,10 +160,8 @@ class AdaptiveAgent:
         )
 
     def reset_hidden(self):
-        """Called by the evaluation harness between students."""
         self.policy_network.reset_hidden()
 
-    # ── Pre-training loop ─────────────────────────────────────────────────────
 
     def pretrain(self, n_episodes: int = 1000, n_questions: int = 100,
                  gamma: float = 0.99):

@@ -1,6 +1,0 @@
-model,Recall@5,MRR,Embedding_Time_sec,Avg_Query_Time_sec
-all-MiniLM-L6-v2,1.0,1.0,17.7,4.833
-all-MiniLM-L12-v2,1.0,1.0,18.08,4.8564
-paraphrase-MiniLM-L6-v2,1.0,1.0,14.69,4.5987
-multi-qa-MiniLM-L6-cos-v1,1.0,0.9167,16.73,4.8553
-BAAI/bge-small-en-v1.5,1.0,0.9167,21.45,4.9639

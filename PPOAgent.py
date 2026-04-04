@@ -23,7 +23,7 @@ class PPOAgent:
                  entropy_coef=0.12,
                  value_coef=0.5,
                  rollout_episodes=8,
-                 tbptt_chunk=16,        # chunk size for Truncated BPTT
+                 tbptt_chunk=16,        
                  use_lstm=False):
 
         self.gamma            = gamma
@@ -70,7 +70,7 @@ class PPOAgent:
 
         self.pretrain(n_episodes=n_episodes, n_questions=n_questions)
 
-    # ------------------------------------------------------------------
+   
     def _build_action_mask(self):
         mask = torch.full((self.mdp.n_actions,), float('-inf'))
         for idx in range(self.mdp.n_actions):
@@ -81,7 +81,7 @@ class PPOAgent:
                 mask[idx] = 0.0
         return mask
 
-    # ------------------------------------------------------------------
+   
     def select_action(self, state_vector, hidden=None, training=False):
         state = torch.FloatTensor(state_vector).unsqueeze(0)  # (1, input_size)
 
@@ -102,7 +102,7 @@ class PPOAgent:
 
         return action.item(), dist.log_prob(action), dist.entropy(), value, mask, new_hidden
 
-    # ------------------------------------------------------------------
+    
     def _compute_gae(self, rewards, values, dones):
         advantages = []
         gae        = 0.0
@@ -122,7 +122,7 @@ class PPOAgent:
         returns    = advantages + torch.FloatTensor(values)
         return advantages, returns
 
-    # ------------------------------------------------------------------
+    
     def run_episode(self, n_questions=25):
         self.simulator.reset_mastery_scores()
         for topic in self.ks.topics:
@@ -145,7 +145,7 @@ class PPOAgent:
             action_idx, log_prob, entropy, value, mask, hidden = self.select_action(
                 state_vector, hidden=hidden, training=True)
 
-            # detach hidden to avoid backprop through full episode history
+            
             if hidden is not None:
                 hidden = (hidden[0].detach(), hidden[1].detach())
 
@@ -170,13 +170,12 @@ class PPOAgent:
             buf['entropies'].append(entropy.item())
             buf['dones'].append(0.0)
             buf['masks'].append(mask)
-            # Mark episode start for each step so we can reset hidden state correctly
+           
             buf['episode_start'].append(1.0 if step == 0 else 0.0)
 
         buf['dones'][-1] = 1.0
         return buf
 
-    # ------------------------------------------------------------------
     def ppo_update(self, buf):
         states         = torch.FloatTensor(np.array(buf['states']))
         actions        = torch.LongTensor(buf['actions'])
@@ -194,33 +193,27 @@ class PPOAgent:
         for _ in range(self.ppo_epochs):
 
             if self.use_lstm:
-                # ── LSTM path: one update per tbptt_chunk, each with its own fresh graph ──
-                # We iterate over the buffer in sequential order so hidden state
-                # is always consistent with how it was collected during rollout.
                 self.ac_network.train()
                 hidden = None
                 t = 0
 
                 while t < n:
-                    # Reset hidden at episode boundary
                     if episode_starts[t] == 1.0:
                         hidden = None
 
-                    # Find chunk end, stop early at episode boundary
                     chunk_end = min(t + self.tbptt_chunk, n)
                     for tc in range(t + 1, chunk_end):
                         if episode_starts[tc] == 1.0:
                             chunk_end = tc
                             break
-
-                    # Fresh forward pass for this chunk — new graph, no retain_graph needed
-                    s_chunk = states[t:chunk_end].unsqueeze(0)        # (1, chunk, input)
-                    m_chunk = masks[t:chunk_end]                       # (chunk, n_actions)
+                    
+                    s_chunk = states[t:chunk_end].unsqueeze(0)        
+                    m_chunk = masks[t:chunk_end]                      
 
                     logits_chunk, values_chunk, new_hidden = self.ac_network(s_chunk, hidden)
-                    logits_chunk = logits_chunk.squeeze(0)             # (chunk, n_actions)
+                    logits_chunk = logits_chunk.squeeze(0)             
                     if values_chunk.dim() > 1:
-                        values_chunk = values_chunk.squeeze(0)        # (chunk,)
+                        values_chunk = values_chunk.squeeze(0)      
 
                     logits_chunk = logits_chunk + m_chunk
 
@@ -243,7 +236,7 @@ class PPOAgent:
                             - self.entropy_coef * entropy)
 
                     self.optimizer.zero_grad()
-                    loss.backward()                                    # no retain_graph needed
+                    loss.backward()                                    
                     nn.utils.clip_grad_norm_(self.ac_network.parameters(), max_norm=0.1)
                     self.optimizer.step()
                     total_loss_val += loss.item()
@@ -288,7 +281,7 @@ class PPOAgent:
 
         return total_loss_val / (self.ppo_epochs * max(1, n // self.mini_batch))
 
-    # ------------------------------------------------------------------
+  
     def pretrain(self, n_episodes=2000, n_questions=500):
         total_losses = []
 
@@ -337,7 +330,7 @@ class PPOAgent:
 
         return total_losses
 
-    # ------------------------------------------------------------------
+    
     def update(self, topic, score, difficulty, question_type):
         prev_score       = self.ks.topic_score[topic]
         old_earned_diff  = self.ks.current_level[topic]['earned_diff_idx']
