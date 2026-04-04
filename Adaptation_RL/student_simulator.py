@@ -2,7 +2,7 @@ import requests
 import random
 
 OLLAMA_URL  = "http://localhost:11434/api/generate"
-OLLAMA_MODEL = "llama3:8b"
+OLLAMA_MODEL = "llama3"
 
 
 PERSONAS = {
@@ -50,7 +50,7 @@ def _call_llm(prompt, temperature = 0.6):
             "stream": False,
             "options": {"temperature": temperature, "num_predict": 300},
         },
-        timeout=60,
+        timeout=6000,
     )
     response.raise_for_status()
     return response.json()["response"].strip()

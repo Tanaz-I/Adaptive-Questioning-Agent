@@ -18,7 +18,7 @@ from tqdm import tqdm
 CHROMA_DB_DIR   = "./chroma_db"
 COLLECTION_NAME = "rag_kb"
 OLLAMA_URL      = "http://localhost:11434/v1/chat/completions"
-LLM_MODEL_NAME  = "llama3:8b"
+LLM_MODEL_NAME  = "llama3"
 CANONICAL_TOPICS_FILE = "./canonical_topics.json"
 
 
@@ -35,12 +35,20 @@ def call_llm(prompt: str, max_tokens: int = 1024) -> str:
             "max_tokens":  max_tokens,
             "messages":    [{"role": "user", "content": prompt}],
         },
-        timeout=120,
+        timeout=12000,
     )
-    # print(response.json())
-    raw = response.json()["choices"][0]["message"]["content"].strip()
-    # raw = response.json()["response"].strip()
+    data = response.json()
 
+    if "choices" in data:
+        raw = data["choices"][0]["message"]["content"]
+    elif "message" in data:
+        raw = data["message"]["content"]
+    elif "response" in data:
+        raw = data["response"]
+    else:
+        raise ValueError(f"Unexpected response format: {data}")
+
+    raw = raw.strip()
     # Strip markdown fences if present
     if raw.startswith("```"):
         raw = raw.split("```")[1]

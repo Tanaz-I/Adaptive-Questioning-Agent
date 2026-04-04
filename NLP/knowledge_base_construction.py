@@ -243,7 +243,7 @@ Text:
     response = requests.post(
         "http://localhost:11434/api/generate",
         json={
-            "model": "llama3:8b",
+            "model": "llama3",
             "prompt": prompt,
             "stream": False,
             "options": {"temperature": 0}
@@ -694,7 +694,7 @@ Dont give the changes. Return only the code.
     response = requests.post(
         "http://localhost:11434/api/generate",
         json={
-            "model": "llama3:8b",
+            "model": "llama3",
             "prompt": prompt,
             "stream": False,
             "options": {"temperature": 0}

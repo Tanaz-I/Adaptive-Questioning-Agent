@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "llama3:8b"
+MODEL_NAME = "llama3"
 
 EVALUATIVE_FRAMES = [
     "Under what conditions would you prefer {A} over {B}? Justify your choice.",
@@ -97,7 +97,7 @@ def parse_json(output):
     for i, line in enumerate(lines):
         if "?" in line:
             # include previous lines if code exists
-            start_idx = max(0, i - 8)
+            start_idx = 0  # include all previous lines
             question = "\n".join(lines[start_idx:i+1])
             break
 
@@ -254,6 +254,18 @@ def validate(result, expected_type="factual"):
 #     return any(sym in text for sym in [";", "{", "}", "()", "class", "="])
 
 def extract_code_block(text):
+    # First, check for markdown code blocks
+    if '```' in text:
+        import re
+        code_blocks = re.findall(r'```(?:\w+)?\n?(.*?)\n?```', text, re.DOTALL)
+        if code_blocks:
+            # Join multiple code blocks if any
+            code = '\n\n'.join(code_blocks).strip()
+            # Remove code from text for prose
+            prose = re.sub(r'```(?:\w+)?\n?.*?\n?```', '', text, flags=re.DOTALL).strip()
+            return code, prose
+
+    # Fallback to signal-based extraction
     CODE_SIGNALS = (
         '{', '}', ';', '::', '->', 'def ', 'class ',
         'public ', 'private ', 'return ', '#include',
