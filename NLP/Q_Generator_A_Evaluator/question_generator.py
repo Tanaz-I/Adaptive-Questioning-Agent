@@ -11,7 +11,7 @@ Advanced Question Generator (FINAL - MULTI-HOP VERSION)
 # NLP.Q_Generator_A_Evaluator.
 import json
 import requests
-from retrieval_engine import retrieve_chunks, get_neighbor_chunks
+from NLP.Q_Generator_A_Evaluator.retrieval_engine import retrieve_chunks, get_neighbor_chunks
 import numpy as np
 
 from concurrent.futures import ThreadPoolExecutor
