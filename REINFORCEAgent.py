@@ -7,7 +7,7 @@ from collections import defaultdict
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from policy_network_1 import PolicyNetworkMLP, PolicyNetworkLSTM
+from policy_network import PolicyNetworkMLP, PolicyNetworkLSTM
 
 
 class AdaptiveAgent:

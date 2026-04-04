@@ -11,7 +11,6 @@ from MDP import MDP
 from Simulator import Simulator
 from dqn_network import DQNNetwork
 
-
 class ReplayBuffer:
     def __init__(self, capacity=10_000):
         self.buffer = deque(maxlen=capacity)
@@ -32,8 +31,6 @@ class ReplayBuffer:
 
     def __len__(self):
         return len(self.buffer)
-
-
 class DQNAgent:
 
     def __init__(
@@ -47,11 +44,11 @@ class DQNAgent:
         lr=1e-4,
         batch_size=64,
         buffer_capacity=10_000,
-        target_update_freq=10,
+        target_update_freq=200,   # steps, not episodes
         eps_start=1.0,
         eps_end=0.05,
         eps_decay=0.995,
-        eval_eps=0.15,          # exploration used at evaluation time
+        eval_eps=0.05,            # lowered: less noise at eval time
     ):
         self.gamma              = gamma
         self.batch_size         = batch_size
@@ -59,7 +56,7 @@ class DQNAgent:
         self.eps                = eps_start
         self.eps_end            = eps_end
         self.eps_decay          = eps_decay
-        self.eval_eps           = eval_eps  # fixed epsilon used when training=False
+        self.eval_eps           = eval_eps
 
         self.mdp = MDP(
             list(topics_difficulty.keys()),
@@ -76,14 +73,21 @@ class DQNAgent:
         self.target_net.eval()
 
         self.optimizer = torch.optim.AdamW(self.online_net.parameters(), lr=lr)
-        self.replay    = ReplayBuffer(buffer_capacity)
 
+        # LR scheduler: decay LR by 0.5 every 300 episodes
+        self.scheduler = torch.optim.lr_scheduler.StepLR(
+            self.optimizer, step_size=300, gamma=0.5
+        )
+
+        self.replay    = ReplayBuffer(buffer_capacity)
         self.simulator = Simulator(topic_difficulty=topics_difficulty)
         self.ks        = KnowledgeState(
             topics_difficulty=topics_difficulty,
             prerequisites=prerequisites,
             window_size=10,
         )
+
+        self.total_steps = 0   # global step counter for target net sync
 
         self.pretrain(n_episodes=n_episodes, n_questions=n_questions)
 
@@ -115,16 +119,15 @@ class DQNAgent:
         mask = self._build_action_mask()
         valid_indices = mask.nonzero(as_tuple=False).squeeze(1).tolist()
 
-        # During training use decaying eps; during evaluation use fixed eval_eps
-        # so the agent still explores enough to unlock all (diff, qtype) combos
-        # that is_mastered() requires — pure greedy never gets there.
         active_eps = self.eps if training else self.eval_eps
         if random.random() < active_eps:
             return random.choice(valid_indices)
 
+        self.online_net.eval()          # disable dropout for action selection
         with torch.no_grad():
-            state    = torch.FloatTensor(state_vector).unsqueeze(0)
-            q_vals   = self.online_net(state).squeeze(0)
+            state  = torch.FloatTensor(state_vector).unsqueeze(0)
+            q_vals = self.online_net(state).squeeze(0)
+        self.online_net.train()         # re-enable dropout for subsequent updates
 
         masked_q = q_vals.clone()
         masked_q[~mask] = float('-inf')
@@ -134,7 +137,7 @@ class DQNAgent:
         self._reset_knowledge_state()
         episode_rewards = []
 
-        for _ in range(n_questions):
+        for step in range(n_questions):
             state_vector = self.ks.get_state_vector()
             action_idx   = self.select_action(state_vector, training=True)
 
@@ -146,19 +149,23 @@ class DQNAgent:
             score = self.simulator.get_score(topic, difficulty, question_type)
             self.ks.update(topic, score, difficulty, question_type)
 
+            done   = 1.0 if step == n_questions - 1 else 0.0   # clean done flag
             reward = self.mdp.compute_reward(
                 self.ks, topic, score, prev_score,
                 old_earned_diff, old_earned_qtype,
             )
 
             next_state_vector = self.ks.get_state_vector()
-            self.replay.push(state_vector, action_idx, reward, next_state_vector, 0.0)
+            self.replay.push(state_vector, action_idx, reward, next_state_vector, done)
             episode_rewards.append(reward)
 
-        # Mark last transition as terminal
-        if self.replay.buffer:
-            s, a, r, ns, _ = self.replay.buffer[-1]
-            self.replay.buffer[-1] = (s, a, r, ns, 1.0)
+            # Update network every step, not once per episode
+            self.update_network()
+            self.total_steps += 1
+
+            # Sync target net every N steps
+            if self.total_steps % self.target_update_freq == 0:
+                self.target_net.load_state_dict(self.online_net.state_dict())
 
         return episode_rewards
 
@@ -168,9 +175,11 @@ class DQNAgent:
 
         states, actions, rewards, next_states, dones = self.replay.sample(self.batch_size)
 
+        self.online_net.train()
         q_values = self.online_net(states).gather(1, actions.unsqueeze(1)).squeeze(1)
 
         with torch.no_grad():
+            # Double DQN: online net picks action, target net evaluates it
             next_actions = self.online_net(next_states).argmax(dim=1, keepdim=True)
             next_q       = self.target_net(next_states).gather(1, next_actions).squeeze(1)
             targets      = rewards + self.gamma * next_q * (1 - dones)
@@ -190,13 +199,15 @@ class DQNAgent:
 
         for episode in range(1, n_episodes + 1):
             ep_rewards = self.run_episode(n_questions)
-            loss       = self.update_network()
 
+            # Decay epsilon once per episode
             self.eps = max(self.eps_end, self.eps * self.eps_decay)
 
-            if episode % self.target_update_freq == 0:
-                self.target_net.load_state_dict(self.online_net.state_dict())
+            # Step LR scheduler once per episode
+            self.scheduler.step()
 
+            # Collect losses from replay (approximate: last batch loss)
+            loss = self.update_network()
             if loss is not None:
                 total_losses.append(loss)
             episode_rewards_log.append(np.mean(ep_rewards))
@@ -204,20 +215,26 @@ class DQNAgent:
             if episode % 50 == 0:
                 avg_loss   = np.mean(total_losses[-50:]) if total_losses else float('nan')
                 avg_reward = np.mean(episode_rewards_log[-50:])
+                current_lr = self.optimizer.param_groups[0]['lr']
                 print(
                     f"Episode {episode}/{n_episodes} | "
                     f"Avg Loss: {avg_loss:.4f} | "
                     f"Avg Reward: {avg_reward:.4f} | "
-                    f"Epsilon: {self.eps:.4f}"
+                    f"Epsilon: {self.eps:.4f} | "
+                    f"LR: {current_lr:.6f}"
                 )
 
-        window   = 50
+        # Save plot instead of blocking with plt.show()
+        window   = min(50, len(total_losses))
         smoothed = np.convolve(total_losses, np.ones(window) / window, mode='valid')
+        plt.figure()
         plt.plot(smoothed)
         plt.title('Smoothed DQN Training Loss')
-        plt.xlabel('Episode')
+        plt.xlabel('Step')
         plt.ylabel('Loss')
-        plt.show()
+        plt.savefig('dqn_training_loss.png', dpi=150, bbox_inches='tight')
+        plt.close()
+        print("Training loss plot saved to dqn_training_loss.png")
 
         return total_losses
 

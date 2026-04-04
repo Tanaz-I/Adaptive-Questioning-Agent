@@ -1,0 +1,3 @@
+Metric,Baseline,REINFORCE,PPO,DQN
+Avg Final Score,0.612,0.713,0.727,0.868
+Avg Topics Mastered,0.66,2.36,2.18,0.12

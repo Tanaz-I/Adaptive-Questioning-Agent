@@ -4,76 +4,13 @@ from collections import defaultdict
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from PPOAgent_1 import PPOAgent
-from Agent import AdaptiveAgent
+from PPOAgent import PPOAgent
+from REINFORCEAgent import AdaptiveAgent
 from rule_based_agent import RuleBasedAgent
 
 
-"""class RuleBasedAgent:
-    
-    def __init__(self, topics_difficulty, prerequisites, w1, w2, w3):
-        self.ks  = KnowledgeState(topics_difficulty=topics_difficulty, prerequisites = prerequisites, window_size=10)
-        self.mdp = MDP(
-            list(topics_difficulty.keys()),
-            difficulty_types=['basic', 'intermediate', 'advanced'],
-            q_types=['factual', 'inferential', 'evaluative'],
-            w1=w1, w2=w2, w3=w3
-        )
-        self.topics      = list(topics_difficulty.keys())
-        self.topic_idx   = 0
-        self.last_score  = defaultdict(float)
-        self.curr_diff   = {t: 'basic' for t in self.topics}
-
-    def select_action(self):
-        topic = self.topics[self.topic_idx % len(self.topics)]
-        self.topic_idx += 1
-
-        last = self.last_score[topic]
-        if last > 0.8 and self.curr_diff[topic] != 'advanced':
-            self.curr_diff[topic] = difficulty_level[
-                min(difficulty_level.index(self.curr_diff[topic]) + 1, 2)
-            ]
-        elif last < 0.4 and self.curr_diff[topic] != 'basic':
-            self.curr_diff[topic] = difficulty_level[
-                max(difficulty_level.index(self.curr_diff[topic]) - 1, 0)
-            ]
-
-        qtype_cycle = ['factual', 'inferential', 'evaluative']
-        qtype = qtype_cycle[self.topic_idx % 3]
-        return topic, self.curr_diff[topic], qtype
-
-    def update(self, topic, score, difficulty, question_type):
-        self.last_score[topic] = score
-        self.ks.update(topic, score, difficulty, question_type)
-
-    def reset(self, topics_difficulty):
-        self.topic_idx  = 0
-        self.last_score = defaultdict(float)
-        self.curr_diff  = {t: 'basic' for t in self.topics}
-        for topic in self.topics:
-            self.ks.topic_score[topic]   = 0.0
-            self.ks.attempts[topic]      = 0
-            self.ks.recent_scores[topic].clear()
-            self.ks.combo_scores[topic] = defaultdict(list)
-            self.ks.prev_qtype[topic]    = (None, None)
-            self.ks.current_level[topic] = {
-                'diff_idx'        : 0,
-                'qtype_idx'       : 0,
-                'earned_diff_idx' : 0,
-                'earned_qtype_idx': 0
-            }
-        self.ks.prev_topic = None"""
-
-
 def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student_nos = 0):
-    """
-    Runs one session for either agent.
-    Returns:
-        score_progression      - list of scores per question
-        topics_mastered        - number of topics mastered at end
-        mastery_steps          - dict of topic -> question number when mastered (-1 if never)
-        per_topic_qtype_scores - nested dict [topic][qtype] -> list of scores
-    """
+    
     score_progression      = []
     mastery_steps          = {t: -1 for t in topics}
     per_topic_qtype_scores = defaultdict(lambda: defaultdict(list))
@@ -88,8 +25,8 @@ def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student
             topic, diff, qtype  = agent.select_action()
 
         score = simulator.get_score(topic, diff, qtype)
-        if is_rl and student_nos == 0:
-            print(f"Step {step}: {topic} | {diff} | {qtype} | score: {score:.2f}")
+        #if is_rl and student_nos == 0:
+        #   print(f"Step {step}: {topic} | {diff} | {qtype} | score: {score:.2f}")
         agent.update(topic, score, diff, qtype)
 
         score_progression.append(score)
@@ -144,9 +81,7 @@ def print_per_topic_report(topics, topics_difficulty,
         print(f"  {'Mastery Rate':<15} {b_mastery_rate:>10.1%} {r_mastery_rate:>12.1%} {p_mastery_rate:>10.1%}")
 
 
-# ---------------------------------------------------------------------------
-# Main evaluation
-# ---------------------------------------------------------------------------
+
 
 def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_students=10, n_questions=500):
     """
@@ -163,8 +98,7 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     ppo_agent = PPOAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
     
     print("Pretraining REINFORCE agent...")
-    reinforce_agent = AdaptiveAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3)
-    
+    reinforce_agent = AdaptiveAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3) 
     
 
     
@@ -212,7 +146,6 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
             rl_agent, simulator, topics, n_questions, is_rl=True, student_nos = student
         )"""
 
-        # store results
         
         reinforce_scores_all.append(r_scores)
         reinforce_mastered_all.append(r_mastered)
@@ -280,7 +213,7 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('Images/eval_6.png', dpi=150)
+    plt.savefig('ComparisonPlots/score_RLAgentvsRule-Based Baseline.png', dpi=150)
     #plt.show()
 
     # 2. Per-topic mastery rate bar chart
@@ -300,7 +233,7 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     plt.title('Per-Topic Mastery Rate — RL Agent vs Baseline')
     plt.legend()
     plt.tight_layout()
-    plt.savefig('Images/mastery_6.png', dpi=150)
+    plt.savefig('ComparisonPlots/mastery_RLAgentvsBaseline.png', dpi=150)
     plt.show()
 
 
@@ -354,4 +287,4 @@ if __name__ == "__main__":
     "Neural Networks"  : ["Loss Functions", "Gradient Descent"]
 }
 
-    evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.2, n_students=50, n_questions=2000)
+    evaluate(topics_difficulty, prerequisites, w1=0.35, w2=0.45, w3=0.2, n_students=50, n_questions=2000)

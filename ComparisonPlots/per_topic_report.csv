@@ -1,0 +1,21 @@
+Topic,Difficulty,Question Type,Baseline,REINFORCE,PPO,DQN
+Neural Networks,advanced,factual,0.676,0.727,0.697,0.446
+Neural Networks,advanced,inferential,0.66,0.717,0.691,0.443
+Neural Networks,advanced,evaluative,0.635,0.7,0.669,0.416
+Neural Networks,advanced,Mastery Rate,0.16,0.68,0.66,0.0
+Gradient Descent,intermediate,factual,0.73,0.781,0.754,0.777
+Gradient Descent,intermediate,inferential,0.711,0.772,0.749,0.686
+Gradient Descent,intermediate,evaluative,0.682,0.744,0.726,0.771
+Gradient Descent,intermediate,Mastery Rate,0.06,0.58,0.54,0.12
+Backpropagation,advanced,factual,0.602,0.515,0.454,0.162
+Backpropagation,advanced,inferential,0.587,0.518,0.441,0.145
+Backpropagation,advanced,evaluative,0.561,0.486,0.409,0.056
+Backpropagation,advanced,Mastery Rate,0.24,0.36,0.28,0.0
+Activation Functions,basic,factual,0.739,0.768,0.774,0.644
+Activation Functions,basic,inferential,0.722,0.756,0.78,0.585
+Activation Functions,basic,evaluative,0.693,0.732,0.753,0.459
+Activation Functions,basic,Mastery Rate,0.06,0.38,0.4,0.0
+Overfitting,intermediate,factual,0.682,0.638,0.561,0.316
+Overfitting,intermediate,inferential,0.667,0.627,0.554,0.317
+Overfitting,intermediate,evaluative,0.639,0.608,0.53,0.255
+Overfitting,intermediate,Mastery Rate,0.14,0.36,0.3,0.0
