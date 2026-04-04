@@ -13,7 +13,7 @@ DOCS_DIR        = "./contents"
 CHROMA_DB_DIR   = "./chroma_db"
 COLLECTION_NAME = "rag_kb"
 OLLAMA_URL      = "http://localhost:11434/api/generate"
-OLLAMA_MODEL    = "llama3:8b"
+OLLAMA_MODEL    = "llama3"
 
 # ─────────────────────────────────────────────
 # Step 1 — Build Knowledge Base
@@ -103,7 +103,7 @@ response = requests.post(
             "num_predict": 200,
         },
     },
-    timeout=60,
+    timeout=6000,
 )
 
 def safe_parse_json(raw, fallback):
@@ -282,7 +282,7 @@ for step in range(N_QUESTIONS):
         continue
 
     # ── 7d. NLP evaluates answer ─────────────────────────────
-    eval_result = evaluate_answer(student_answer, reference_answer, qtype)
+    eval_result = evaluate_answer(student_answer, reference_answer, qtype, question)
     score       = eval_result['final_score']
 
     print(f"\nEvaluation:")
