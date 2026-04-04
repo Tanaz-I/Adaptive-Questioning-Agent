@@ -500,6 +500,13 @@ IMPORTANT:
 - Do NOT describe what the answer will be
 - Do NOT say "the answer is based on..."
 - Directly give the final answer
+- Generate exactly ONE question and its answer.
+
+Do NOT include:
+- "Here is the question"
+- "Here is the answer"
+- "Exam question"
+- "PART 1", "PART 2"
 
 For code questions:
 - Include the exact output (if applicable)
@@ -521,7 +528,7 @@ Example:
 Return ONLY valid JSON, no markdown, no explanation:
 {{"question": "...", "reference_answer": "..."}}"""
 
-    return parse_json(call_llm(prompt, temperature=0.6))
+    return parse_json(call_llm(prompt, temperature=0.1))
 
 
 
@@ -833,6 +840,13 @@ IMPORTANT:
 - Do NOT describe what the answer will be
 - Do NOT say "the answer is based on..."
 - Directly give the final answer
+-Generate exactly ONE question and its answer.
+
+Do NOT include:
+- "Here is the question"
+- "Here is the answer"
+- "Exam question"
+- "PART 1", "PART 2"
 
 For code questions:
 - Include the exact output (if applicable)
@@ -855,7 +869,7 @@ Example:
 Return ONLY valid JSON, no markdown, no explanation:
 {{"question": "...", "reference_answer": "..."}}"""
 
-    return parse_json(call_llm(prompt, temperature=0.65))
+    return parse_json(call_llm(prompt, temperature=0.15))
 
 
 # ─────────────────────────────────────────────
@@ -1018,6 +1032,13 @@ IMPORTANT:
 - Do NOT describe what the answer will be
 - Do NOT say "the answer is based on..."
 - Directly give the final answer
+-Generate exactly ONE question and its answer.
+
+Do NOT include:
+- "Here is the question"
+- "Here is the answer"
+- "Exam question"
+- "PART 1", "PART 2"
 
 For code questions:
 - Include the exact output (if applicable)
@@ -1040,7 +1061,7 @@ Example:
 Return ONLY valid JSON, no markdown, no explanation:
 {{"question": "...", "reference_answer": "..."}}"""
 
-    return parse_json(call_llm(prompt, temperature=0.7))
+    return parse_json(call_llm(prompt, temperature=0.2))
 
 # ─────────────────────────────────────────────
 # MAIN FUNCTION
