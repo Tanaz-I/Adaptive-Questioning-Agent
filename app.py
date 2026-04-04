@@ -395,7 +395,8 @@ def submit():
 
         eval_result = evaluate_answer(ans, ref, qtype,question)
         score = eval_result["final_score"]
-
+        
+        print(eval_result)
         print(f"  Semantic    : {eval_result.get('semantic_score')}")
         print(f"  Keyword     : {eval_result.get('keyword_score')}")
         print(f"  NLI         : {eval_result.get('nli_score')}")
@@ -451,6 +452,7 @@ def quit_session():
 
 @app.route("/quit")
 def quit_session():
+    from NLP.recommend_material import get_weak_topic_material, recommend_courses
     rl  = state["rl"]
     ks  = rl.ks if rl else None
     summary = []
@@ -480,10 +482,20 @@ def quit_session():
     state["summary"]     = summary
     state["weak_topics"] = weak_topics
 
+    weak_material = get_weak_topic_material(weak_topics)
+    print(weak_material)
+    state["weak_material"]= weak_material
+    
+    course_recs = recommend_courses(weak_topics, top_n=5)
+    state["course_recs"] = course_recs
+    print(course_recs)
+    
     return jsonify({
         "history"    : state["history"],
         "summary"    : summary,
         "weak_topics": weak_topics,
+        "weak_material": weak_material,
+        "course_recs" : course_recs,
     })
 
 
@@ -494,6 +506,8 @@ def report():
         summary     = state.get("summary", []),
         history     = state.get("history", []),
         weak_topics = state.get("weak_topics", []),
+        weak_material= state.get("weak_material", []),
+        course_recs  = state.get("course_recs",  []),
     )
 
 # ─────────────────────────────────────────────

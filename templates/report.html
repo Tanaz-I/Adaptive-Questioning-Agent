@@ -372,18 +372,82 @@
 
   <!-- ── Weak Topics ── -->
   {% if weak_topics %}
-  <div class="weak-section">
-    <div class="section-label">Topics Needing Attention</div>
-    <div class="weak-grid">
-      {% for t in weak_topics %}
-      <div class="weak-card">
-        <h4>{{ t }}</h4>
-        <p>Score below 0.5 — review your uploaded material and consider additional resources for this topic.</p>
-      </div>
-      {% endfor %}
+<div class="weak-section">
+    <div class="section-label">
+        Topics Needing Attention
     </div>
-  </div>
-  {% endif %}
+    <div class="weak-card">
+        <h4>
+            Recommended Study Material
+        </h4>
+        <p style="margin-bottom:8px;">
+            Based on weak topics:
+        </p>
+        <div style="
+            font-size:0.78rem;
+            color:var(--muted);
+            margin-bottom:12px;
+        ">
+            {{ weak_topics | join(", ") }}
+        </div>
+
+        {% if weak_material %}
+            <div style="
+                display:flex;
+                flex-direction:column;
+                gap:6px;
+            ">
+                {% for file in weak_material %}
+
+                <div style="
+                    background: rgba(248,113,113,0.07);
+                    border: 1px solid rgba(248,113,113,0.2);
+                    border-radius: 8px;
+                    padding: 8px 12px;
+                    font-size: 0.82rem;               ">
+
+                    📄 {{ file }}
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p style="color:var(--muted);font-size:0.78rem;">
+                No material found.
+            </p>
+        {% endif %}
+    </div>
+
+</div>
+{% endif %}
+
+{% if course_recs %}
+<div class="weak-section">
+    <div class="section-label">
+        Recommended Courses
+    </div>
+    <div class="weak-grid">
+        {% for c in course_recs %}
+        <div class="weak-card">
+            <h4>
+                {{ c.title }}
+            </h4>
+            <a href="{{ c.url }}"
+               target="_blank"
+               style="
+                    display:inline-block;
+                    margin-top:8px;
+                    font-size:0.78rem;
+                    color:var(--accent);
+                    text-decoration:none;
+               ">
+               View Course →
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+   
 
 </div><!-- /page -->
 
