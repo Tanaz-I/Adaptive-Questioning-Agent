@@ -1,14 +1,3 @@
-"""
-run_simulation.py
-=================
-Drop-in replacement for the session loop in main.py.
-Runs N_QUESTIONS automatically using a simulated student (no manual input).
-
-Usage:
-    python run_simulation.py --student weak  --questions 500
-    python run_simulation.py --student strong --questions 1000
-    python run_simulation.py --student both   --questions 500   # runs both back-to-back
-"""
 
 import argparse
 import json
