@@ -98,7 +98,7 @@ class MDP:
 
         mastery_penalty = 1.0 if ks.is_mastered(topic) else 0.0
 
-        return (self.w1 * improvement
+        return (self.w1 * (0.6 * score + 0.4 * improvement)
             + self.w2 * coverage_bonus
             + self.w4 * advancement_bonus
             + self.w5 * prereq_bonus

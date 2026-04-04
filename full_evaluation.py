@@ -4,7 +4,7 @@ from collections import defaultdict
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from PPOAgent_2 import PPOAgent
+from PPO_Agent_3 import PPOAgent
 from Agent_1 import AdaptiveAgent
 from rule_based_agent import RuleBasedAgent
 
@@ -344,5 +344,5 @@ if __name__ == "__main__":
         prerequisites,
         w1=0.35, w2=0.45, w3=0.2,
         n_students=50,
-        n_questions=1000,
+        n_questions=5000,
     )
