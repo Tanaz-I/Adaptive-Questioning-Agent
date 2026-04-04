@@ -19,9 +19,9 @@ OLLAMA_MODEL    = "llama3"
 # Step 1 — Build Knowledge Base
 # ─────────────────────────────────────────────
 
-knowledge_base_construction.run_pipeline(DOCS_DIR)
-enrich_metadata.enrich_metadata()
-topic_extraction.run_global_topic_extraction()
+# knowledge_base_construction.run_pipeline(DOCS_DIR)
+# enrich_metadata.enrich_metadata()
+# topic_extraction.run_global_topic_extraction()
 
 client = chromadb.PersistentClient(
     path=CHROMA_DB_DIR,

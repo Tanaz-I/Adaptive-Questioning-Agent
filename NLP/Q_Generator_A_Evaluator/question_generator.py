@@ -13,12 +13,13 @@ import json
 import requests
 from NLP.Q_Generator_A_Evaluator.retrieval_engine import retrieve_chunks, get_neighbor_chunks
 import numpy as np
+import re
 
 from concurrent.futures import ThreadPoolExecutor
 
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "llama3"
+MODEL_NAME = "llama3:instruct"
 
 EVALUATIVE_FRAMES = [
     "Under what conditions would you prefer {A} over {B}? Justify your choice.",
@@ -35,6 +36,10 @@ EVALUATIVE_FRAMES = [
 # ─────────────────────────────────────────────
 
 def call_llm(prompt, temperature=0.6):
+    import time
+    start = time.time()
+
+    print("\n[LLM CALL STARTED]")
 
     response = requests.post(
         OLLAMA_URL,
@@ -42,9 +47,13 @@ def call_llm(prompt, temperature=0.6):
             "model": MODEL_NAME,
             "prompt": prompt,
             "stream": False,
-            "options": {"temperature": temperature}
+            "options": {"temperature": temperature},
         }
     )
+
+    end = time.time()
+    print(f"[LLM DONE] Time: {round(end - start, 2)} sec")
+
 
     response.raise_for_status()
     return response.json()["response"].strip()
@@ -54,20 +63,34 @@ def call_llm(prompt, temperature=0.6):
 # Parse JSON
 # ─────────────────────────────────────────────
 def parse_json(output):
-    # print(output)
+    print(output)
 
-    # ---- Clean output ----
-    output = output.replace("```", "")  # remove code fences
+    # ---- Extract code blocks ----
+    code_blocks = re.findall(r'```.*?```', output, re.DOTALL)
+
+    # clean code blocks
+    clean_code = []
+    for cb in code_blocks:
+        cb = cb.replace("```cpp", "").replace("```", "").strip()
+        clean_code.append(cb)
+
+    code_text = "\n".join(clean_code)
+    output = re.sub(r'```.*?```', '', output, flags=re.DOTALL)
 
     # ---- Try JSON first ----
     try:
-        start = output.find("{")
-        end = output.rfind("}") + 1
+        match = re.search(r'\{.*\}', output, re.DOTALL)
 
-        if start != -1 and end > 0:
-            data = json.loads(output[start:end])
+        if match:
+            json_str = match.group(0)
+            json_str = json_str.replace("\n", " ")
+            json_str = json_str.replace('"""', '"')
+
+            data = json.loads(json_str)
 
             question = data.get("question", "").strip()
+            if code_text:
+                question = code_text + "\n" + question
 
             # 🔥 handle broken keys
             answer = data.get("reference_answer", "")
@@ -77,8 +100,8 @@ def parse_json(output):
                 for k, v in data.items():
                     if isinstance(v, str) and len(v.split()) > 5:
                         if k != "question":
-                            answer = v
-                            break
+                            answer += v
+                            # break
 
             return {
                 "question": question,
@@ -87,41 +110,51 @@ def parse_json(output):
     except:
         pass
 
+    print("Fallback Extraction")
     # ---- Fallback extraction ----
-    lines = [l.strip() for l in output.split("\n") if l.strip()]
 
-    question = ""
-    answer = ""
+    start_question  = output.find("\"question\":")
+    end_question = output.find("\"reference_answer\":")
+    question = output[start_question: end_question + 1]
+    answer = output[end_question : ]
+    # lines = [l.strip() for l in output.split("\n") if l.strip()]
 
-    # ---- Extract question ----
-    for i, line in enumerate(lines):
-        if "?" in line:
-            # include previous lines if code exists
-            start_idx = 0  # include all previous lines
-            question = "\n".join(lines[start_idx:i+1])
-            break
+    # question = ""
+    # answer = ""
 
-    # ---- Extract answer ----
-    for i, line in enumerate(lines):
-        if "answer" in line.lower():
-            answer = " ".join(lines[i: i+4])
-            break
+    # # ---- Extract question ----
+    # for i, line in enumerate(lines):
+    #     if "?" in line:
+    #         # include previous lines if code exists
+    #         start_idx = 0  # include all previous lines
+    #         question = "\n".join(lines[start_idx:i+1])
+    #         break
 
-    # fallback if not found
-    if not answer:
-        answer = " ".join(lines[-4:])
+    # # ---- Extract answer ----
+    # for i, line in enumerate(lines):
+    #     if "answer" in line.lower():
+    #         answer = " ".join(lines[i: i+4])
+    #         break
 
-    # safety
-    if not question:
-        question = "Error"
-    if not answer:
-        answer = "Error"
+    # # fallback if not found
+    # if not answer:
+    #     answer = " ".join(lines[-4:])
 
-    # clean unwanted prefixes
-    # print(answer)
-    # print(question)
+    # # safety
+    # if not question:
+    #     question = "Error"
+    # if not answer:
+    #     answer = "Error"
+
+    # # clean unwanted prefixes
+    # # print(answer)
+    # # print(question)
     question = question.replace('"question":', '').strip()
+    question = question.replace('"""', '').strip()
+    if code_text:
+        question = code_text + "\n" + question
     answer = answer.replace('"reference_answer":', '').strip()
+    answer = answer.replace('"""', '').strip()
 
     return {
         "question": question,
@@ -484,11 +517,9 @@ Rules:
 
 PART 2 — Write the reference answer.
 Answer strategy (pick ONE):
-  Strategy A — Direct extraction:
-    If the answer is stated explicitly in the content, extract and paraphrase it.
-  Strategy B — Reasoning from content:
+  Strategy  — Reasoning from content:
     If the answer is NOT stated explicitly but can be inferred from the content,
-    reason step by step using only what the content provides.
+    reason step by step using only what the content provides.Use keywords from content.
     Do NOT use outside knowledge.
 
 Answer rules:
@@ -509,6 +540,7 @@ Do NOT include:
 - "PART 1", "PART 2"
 
 For code questions:
+- Code must be outside JSON in ``` blocks
 - Include the exact output (if applicable)
 - Then explain briefly why
 
@@ -520,8 +552,13 @@ STRICT OUTPUT FORMAT:
 - Do NOT explain what you are doing
 - Use double quotes only
 
-Example:
-{{"question": "...", "reference_answer": "..."}}
+STRICT JSON RULES:
+- All values must be single-line strings
+- Do NOT use triple quotes
+- Do NOT include line breaks inside JSON values
+- Replace newlines with spaces
+- Do NOT use ``` in output
+
 
 {avoid}
 
@@ -638,6 +675,14 @@ Answer rules:
 - reference_answer must be the FULL TEXT of the correct option (not just the label)
 
 {avoid}
+
+STRICT JSON RULES:
+- All values must be single-line strings
+- Do NOT use triple quotes
+- Do NOT include line breaks inside JSON values
+- Replace newlines with spaces
+- Do NOT use ``` in output
+
 If you include anything outside JSON, the answer is WRONG
 Return ONLY valid JSON, no markdown, no explanation:
 {{
@@ -850,6 +895,7 @@ Do NOT include:
 
 For code questions:
 - Include the exact output (if applicable)
+-Code must be outside JSON in ``` blocks
 - Then explain briefly why
 
 STRICT OUTPUT FORMAT:
@@ -861,8 +907,12 @@ STRICT OUTPUT FORMAT:
 - Do NOT explain what you are doing
 - Use double quotes only
 
-Example:
-{{"question": "...", "reference_answer": "..."}}
+STRICT JSON RULES:
+- All values must be single-line strings
+- Do NOT use triple quotes
+- Do NOT include line breaks inside JSON values
+- Replace newlines with spaces
+- Do NOT use ``` in output
 
 {avoid}
 
@@ -1014,6 +1064,7 @@ Rules:
 
 PART 3 — Write the reference answer.
 Rules:
+- Code must be outside JSON in ``` blocks
 - First sentence: state a clear position
 - Next 2-3 sentences: give specific reasons supporting the position,
   referencing both Concept A and Concept B
@@ -1054,8 +1105,13 @@ STRICT OUTPUT FORMAT:
 - Do NOT explain what you are doing
 - Use double quotes only
 
-Example:
-{{"question": "...", "reference_answer": "..."}}
+STRICT JSON RULES:
+- All values must be single-line strings
+- Do NOT use triple quotes
+- Do NOT include line breaks inside JSON values
+- Replace newlines with spaces
+- Do NOT use ``` in output
+
 {avoid}
 
 Return ONLY valid JSON, no markdown, no explanation:
