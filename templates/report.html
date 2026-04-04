@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Session Report — Adaptive Learning Agent</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f0f13;
+      --surface:   #1a1a24;
+      --surface2:  #22222f;
+      --border:    #2e2e40;
+      --accent:    #7c6ff7;
+      --accent2:   #4fd1c5;
+      --good:      #34d399;
+      --warn:      #fbbf24;
+      --bad:       #f87171;
+      --text:      #e8e8f0;
+      --muted:     #8888aa;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 40px 24px 80px;
+    }
+
+    /* ── Header ── */
+    header {
+      max-width: 960px;
+      margin: 0 auto 48px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+    }
+    header h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 2.2rem;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    header p {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .back-btn {
+      text-decoration: none;
+      color: var(--muted);
+      font-size: 0.85rem;
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 20px;
+      transition: all 0.2s;
+    }
+    .back-btn:hover { color: var(--text); border-color: var(--accent); }
+
+    /* ── Layout ── */
+    .page { max-width: 960px; margin: 0 auto; }
+
+    /* ── Section label ── */
+    .section-label {
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+      font-weight: 600;
+    }
+
+    /* ── Overall stats row ── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 14px 14px 0 0;
+    }
+    .stat-card.c-purple::before { background: var(--accent); }
+    .stat-card.c-teal::before   { background: var(--accent2); }
+    .stat-card.c-green::before  { background: var(--good); }
+    .stat-card.c-amber::before  { background: var(--warn); }
+
+    .stat-label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+    .stat-value {
+      font-family: 'DM Serif Display', serif;
+      font-size: 2.4rem;
+      line-height: 1;
+    }
+    .stat-sub {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* ── Charts row ── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 20px;
+      margin-bottom: 48px;
+    }
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+    }
+    .chart-card h3 {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+    .chart-wrap { position: relative; }
+
+    /* ── Topic table ── */
+    .topic-section { margin-bottom: 48px; }
+    .topic-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .topic-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 2fr 100px 90px 90px 120px;
+      align-items: center;
+      gap: 12px;
+      transition: border-color 0.2s;
+    }
+    .topic-row:hover { border-color: var(--accent); }
+    .topic-name { font-weight: 500; font-size: 0.95rem; }
+    .topic-meta { font-size: 0.78rem; color: var(--muted); }
+    .col-head {
+      font-size: 0.68rem;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .header-row {
+      padding: 8px 20px;
+      display: grid;
+      grid-template-columns: 2fr 100px 90px 90px 120px;
+      gap: 12px;
+    }
+
+    /* score bar */
+    .score-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .score-bar-bg {
+      flex: 1;
+      height: 6px;
+      background: var(--border);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.8s ease;
+    }
+    .score-num { font-size: 0.82rem; font-weight: 600; min-width: 32px; }
+
+    /* badge */
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .badge.mastered  { background: rgba(52,211,153,0.15); color: var(--good); }
+    .badge.learning  { background: rgba(251,191,36,0.15);  color: var(--warn); }
+    .badge.weak      { background: rgba(248,113,113,0.15); color: var(--bad);  }
+
+    /* ── Score timeline ── */
+    .timeline-section { margin-bottom: 48px; }
+
+    /* ── Weak topics ── */
+    .weak-section { margin-bottom: 48px; }
+    .weak-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .weak-card {
+      background: var(--surface);
+      border: 1px solid rgba(248,113,113,0.3);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .weak-card h4 { font-size: 0.9rem; margin-bottom: 6px; }
+    .weak-card p  { font-size: 0.8rem; color: var(--muted); }
+
+    /* empty state */
+    .empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 720px) {
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .charts-row { grid-template-columns: 1fr; }
+      .topic-row, .header-row { grid-template-columns: 1fr 80px 70px; }
+      .topic-row > :nth-child(4),
+      .topic-row > :nth-child(5),
+      .header-row > :nth-child(4),
+      .header-row > :nth-child(5) { display: none; }
+      .weak-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Session Report</h1>
+    <p>Adaptive Learning Agent — Performance Analysis</p>
+  </div>
+  <a href="/" class="back-btn">← New Session</a>
+</header>
+
+<div class="page">
+
+  <!-- ── Overall Stats ── -->
+  <div class="section-label">Overall Performance</div>
+  <div class="stats-row">
+
+    {% set total_attempts = summary | sum(attribute='attempts') %}
+    {% set avg_score = (summary | sum(attribute='avg_score') / summary|length) if summary else 0 %}
+    {% set mastered_count = summary | selectattr('mastered') | list | length %}
+    {% set mastery_pct = ((mastered_count / summary|length) * 100) | round(0) | int if summary else 0 %}
+
+    <div class="stat-card c-purple">
+      <div class="stat-label">OVERALL AVG SCORE</div>
+      <div class="stat-value">{{ "%.2f"|format(avg_score) }}</div>
+      <div class="stat-sub">across all topics</div>
+    </div>
+
+    <div class="stat-card c-green">
+      <div class="stat-label">TOPICS MASTERED</div>
+      <div class="stat-value">{{ mastered_count }}<span style="font-size:1.2rem;color:var(--muted)">/{{ summary|length }}</span></div>
+      <div class="stat-sub">{{ mastery_pct }}% mastery rate</div>
+    </div>
+
+    <div class="stat-card c-teal">
+      <div class="stat-label">QUESTIONS ANSWERED</div>
+      <div class="stat-value">{{ history|length }}</div>
+      <div class="stat-sub">total attempts in session</div>
+    </div>
+
+    <div class="stat-card c-amber">
+      <div class="stat-label">WEAK TOPICS</div>
+      <div class="stat-value">{{ weak_topics|length }}</div>
+      <div class="stat-sub">need more practice</div>
+    </div>
+
+  </div>
+
+  <!-- ── Charts ── -->
+  <div class="section-label">Visualizations</div>
+  <div class="charts-row">
+
+    <!-- Per-topic score bar chart -->
+    <div class="chart-card">
+      <h3>Score per Topic</h3>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="topicChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Mastery donut -->
+    <div class="chart-card">
+      <h3>Mastery Breakdown</h3>
+      <div class="chart-wrap" style="height:260px">
+        <canvas id="masteryChart"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Score over time -->
+  <div class="chart-card timeline-section">
+    <h3 style="font-size:0.85rem;font-weight:500;color:var(--muted);margin-bottom:20px;">Score Progression (per question)</h3>
+    <div class="chart-wrap" style="height:180px">
+      <canvas id="timelineChart"></canvas>
+    </div>
+  </div>
+
+  <!-- ── Topic Analysis ── -->
+  <div class="topic-section">
+    <div class="section-label">Topic-by-Topic Analysis</div>
+    <div class="header-row">
+      <span class="col-head">Topic</span>
+      <span class="col-head">Attempts</span>
+      <span class="col-head">Avg Score</span>
+      <span class="col-head">Score</span>
+      <span class="col-head">Status</span>
+    </div>
+    <div class="topic-grid">
+      {% if summary %}
+        {% for item in summary | sort(attribute='avg_score', reverse=True) %}
+          {% if item.mastered %}
+            {% set status_class = 'mastered' %}
+            {% set status_label = '✓ Mastered' %}
+          {% elif item.avg_score >= 0.5 %}
+            {% set status_class = 'learning' %}
+            {% set status_label = '↗ Learning' %}
+          {% else %}
+            {% set status_class = 'weak' %}
+            {% set status_label = '✗ Needs Work' %}
+          {% endif %}
+
+          {% set bar_color = 'var(--good)' if item.mastered else ('var(--warn)' if item.avg_score >= 0.5 else 'var(--bad)') %}
+
+          <div class="topic-row">
+            <div>
+              <div class="topic-name">{{ item.topic }}</div>
+            </div>
+            <div class="topic-meta">{{ item.attempts }} Q{{ 's' if item.attempts != 1 else '' }}</div>
+            <div class="score-bar-wrap">
+              <div class="score-bar-bg">
+                <div class="score-bar-fill"
+                     style="width:{{ (item.avg_score * 100)|round(0)|int }}%; background:{{ bar_color }}">
+                </div>
+              </div>
+            </div>
+            <div class="score-num" style="color:{{ bar_color }}">
+              {{ "%.2f"|format(item.avg_score) }}
+            </div>
+            <div><span class="badge {{ status_class }}">{{ status_label }}</span></div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty">No topic data available.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Weak Topics ── -->
+  {% if weak_topics %}
+  <div class="weak-section">
+    <div class="section-label">Topics Needing Attention</div>
+    <div class="weak-grid">
+      {% for t in weak_topics %}
+      <div class="weak-card">
+        <h4>{{ t }}</h4>
+        <p>Score below 0.5 — review your uploaded material and consider additional resources for this topic.</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div><!-- /page -->
+
+<!-- ── Chart.js scripts ── -->
+<script>
+  const summaryData = {{ summary | tojson }};
+  const historyData = {{ history | tojson }};
+
+  const labels  = summaryData.map(d => d.topic);
+  const scores  = summaryData.map(d => d.avg_score);
+  const colors  = summaryData.map(d =>
+    d.mastered ? '#34d399' : (d.avg_score >= 0.5 ? '#fbbf24' : '#f87171')
+  );
+
+  // ── Topic bar chart ──
+  new Chart(document.getElementById('topicChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: scores,
+        backgroundColor: colors,
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          ticks: { color: '#8888aa', font: { size: 11 }, maxRotation: 30 },
+          grid:  { color: '#2e2e40' }
+        },
+        y: {
+          min: 0, max: 1,
+          ticks: { color: '#8888aa', font: { size: 11 } },
+          grid:  { color: '#2e2e40' }
+        }
+      }
+    }
+  });
+
+  // ── Mastery donut ──
+  const masteredCount = summaryData.filter(d => d.mastered).length;
+  const learningCount = summaryData.filter(d => !d.mastered && d.avg_score >= 0.5).length;
+  const weakCount     = summaryData.filter(d => !d.mastered && d.avg_score < 0.5).length;
+
+  new Chart(document.getElementById('masteryChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Mastered', 'Learning', 'Needs Work'],
+      datasets: [{
+        data: [masteredCount, learningCount, weakCount],
+        backgroundColor: ['#34d399', '#fbbf24', '#f87171'],
+        borderColor: '#1a1a24',
+        borderWidth: 3,
+        hoverOffset: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '68%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            color: '#8888aa',
+            font: { size: 11 },
+            padding: 16,
+            usePointStyle: true,
+            pointStyleWidth: 8,
+          }
+        }
+      }
+    }
+  });
+
+  // ── Score timeline ──
+  const timeLabels = historyData.map((_, i) => `Q${i + 1}`);
+  const timeScores = historyData.map(d => d.score);
+
+  new Chart(document.getElementById('timelineChart'), {
+    type: 'line',
+    data: {
+      labels: timeLabels,
+      datasets: [{
+        label: 'Score',
+        data: timeScores,
+        borderColor: '#7c6ff7',
+        backgroundColor: 'rgba(124,111,247,0.12)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: '#7c6ff7',
+        tension: 0.4,
+        fill: true,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8888aa', font: { size: 11 } }, grid: { color: '#2e2e40' } },
+        y: { min: 0, max: 1, ticks: { color: '#8888aa', font: { size: 11 } }, grid: { color: '#2e2e40' } }
+      }
+    }
+  });
+</script>
+
+</body>
+</html>

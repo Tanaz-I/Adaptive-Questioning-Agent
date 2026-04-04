@@ -108,7 +108,7 @@ function nextQ() {
     });
 }
 
-
+/*
 // ❌ QUIT SESSION (IMPROVED)
 function quit() {
     fetch("/quit")
@@ -131,6 +131,17 @@ function quit() {
         });
 
         document.getElementById("summary").innerHTML = html;
+    })
+    .catch(err => {
+        console.error("Quit error:", err);
+    });
+} */
+
+function quit() {
+    fetch("/quit")
+    .then(r => r.json())
+    .then(() => {
+        window.location.href = "/report";
     })
     .catch(err => {
         console.error("Quit error:", err);
