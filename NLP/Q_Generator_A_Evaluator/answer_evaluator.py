@@ -130,7 +130,7 @@ def nli_score(student, reference, student_emb=None, reference_emb=None):
 
 
 def _completeness_score(student_emb, ref_sent_embs, threshold=0.50):
-    if not ref_sent_embs:
+    if len(ref_sent_embs) == 0:
         return 0.0
     total = 0.0
     for ref_emb in ref_sent_embs:
@@ -176,7 +176,18 @@ def recalibrate(score, low=0.30, high=0.85):
 # Final Evaluation (GENERIC + ADAPTIVE)
 # ─────────────────────────────────────────────
 
-def evaluate_answer(student, reference, question_type):
+def evaluate_answer(student, reference, question_type, question):
+    def is_question_copy(student, question):
+        return student.strip().lower() == question.strip().lower()
+    if is_question_copy(student, question):
+        return {
+            "semantic_score": 0.0,
+            "keyword_score": 0.0,
+            "nli_score": 0.0,
+            "completeness_score": 0.0,
+            "length_penalty": 0.0,
+            "final_score": 0.0
+        }
     # Tokenize reference into sentences
     ref_sentences = [s.strip() for s in reference.split(".")
                      if len(s.strip()) > 5]
@@ -227,7 +238,7 @@ if __name__ == "__main__":
 
     from question_generator import generate_question
 
-    q = generate_question("Inheritance", "medium", "inferential")
+    q, _ = generate_question("Pointers to Class Members", "medium", "inferential")
 
     print("\nQuestion:\n", q["question"])
 
@@ -237,7 +248,8 @@ if __name__ == "__main__":
     result = evaluate_answer(
         student,
         q["reference_answer"],
-        q["question_type"]
+        q["question_type"],
+        q["question"]
     )
 
     print("\nEvaluation Result:\n")
