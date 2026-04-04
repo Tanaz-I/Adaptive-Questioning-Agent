@@ -149,7 +149,7 @@ def run_simulation(
     topics_difficulty: dict,
     dependencies: dict,
     concept_graph,
-    seed: int | None = None,
+    seed = None,
     output_dir: str = "./simulation_results",
 ) -> list[dict]:
 
@@ -205,6 +205,8 @@ def run_simulation(
         question         = result["question"]
         reference_answer = result["reference_answer"]
 
+        print(question)
+
         if question in ("No data", "Insufficient data", "Error"):
             print(f"  [SKIP] Could not generate question.")
             continue
@@ -217,10 +219,10 @@ def run_simulation(
             difficulty=diff,
             question_type=qtype,
         )
-        print(f"  Answer (simulated): {student_answer[:80]}...")
+        print(f"  Answer (simulated): {student_answer}...")
 
         # ── Evaluate answer ───────────────────────────────────
-        eval_result = evaluate_answer(student_answer, reference_answer, qtype)
+        eval_result = evaluate_answer(student_answer, reference_answer, qtype, question)
         score       = eval_result["final_score"]
 
         # ── Update RL agent ───────────────────────────────────

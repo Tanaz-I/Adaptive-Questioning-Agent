@@ -1,0 +1,29 @@
+{
+  "total_questions": 10,
+  "overall_avg_score": 0.701,
+  "avg_by_difficulty": {
+    "basic": 0.701
+  },
+  "avg_by_question_type": {
+    "inferential": 0.695,
+    "factual": 0.793,
+    "evaluative": 0.637
+  },
+  "avg_by_topic": {
+    "Object Oriented Programming": 0.687,
+    "Constructors": 0.76
+  },
+  "final_mastered": [],
+  "topic_attempts": {
+    "Constructors": 2,
+    "Destructors": 0,
+    "Object Oriented Programming": 8,
+    "Pointers to Class Members": 0
+  },
+  "topic_avg_scores": {
+    "Constructors": 0.76,
+    "Destructors": 0.0,
+    "Object Oriented Programming": 0.687,
+    "Pointers to Class Members": 0.0
+  }
+}

@@ -282,7 +282,7 @@ for step in range(N_QUESTIONS):
         continue
 
     # ── 7d. NLP evaluates answer ─────────────────────────────
-    eval_result = evaluate_answer(student_answer, reference_answer, qtype)
+    eval_result = evaluate_answer(student_answer, reference_answer, qtype, question)
     score       = eval_result['final_score']
 
     print(f"\nEvaluation:")
