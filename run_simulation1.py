@@ -26,12 +26,12 @@ import chromadb
 import requests
 from chromadb.config import Settings
 
-from Adaptation_RL.Agent import AdaptiveAgent
+from PPO_RL.PPOAgent import PPOAgent
 from NLP import knowledge_base_construction, enrich_metadata, topic_extraction
 from NLP.Q_Generator_A_Evaluator.answer_evaluator import evaluate_answer
 from NLP.Q_Generator_A_Evaluator.question_generator import generate_question
 from NLP.concept_graph import build_concept_graph
-from Adaptation_RL.student_simulator import SimulatedStudent
+from PPO_RL.student_simulator import SimulatedStudent
 
 # ─────────────────────────────────────────────
 # Config
@@ -242,7 +242,7 @@ def run_simulation(
 
             # ── RL selects action ──────────────────────────────────────────
             state_vector       = rl_agent.ks.get_state_vector()
-            action_idx, _, _   = rl_agent.select_action(state_vector, training=False)
+            action_idx   = rl_agent.select_action(state_vector, training=False)[0]
             topic, diff, qtype = rl_agent.mdp.decode(action_idx)
 
             print(f"| {topic} | {diff} | {qtype}")
@@ -520,10 +520,10 @@ if __name__ == "__main__":
     student_types = ["strong", "weak"]
 
     print("Pretraining RL Agent")
-    rl_agent = AdaptiveAgent(
+    rl_agent = PPOAgent(
         topics_difficulty=topics_difficulty,
         prerequisites=dependencies,
-        w1=0.35, w2=0.45, w3=0.2,
+        w1=0.35, w2=0.45, w3=0.2, use_lstm=True
     )
 
     all_logs = {}
@@ -532,7 +532,7 @@ if __name__ == "__main__":
         log = run_simulation(
             rl_agent,
             student_type=stype,
-            n_questions=5,
+            n_questions=100,
             topics_difficulty=topics_difficulty,
             dependencies=dependencies,
             concept_graph=concept_graph,
