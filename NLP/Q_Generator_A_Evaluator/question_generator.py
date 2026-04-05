@@ -64,7 +64,7 @@ def call_llm(prompt, temperature=0.6):
 # ─────────────────────────────────────────────
 
 def parse_json(output):
-    print(output)
+    # print(output)
 
     # ─────────────────────────────────────────────
     # Step 1: Extract ALL code blocks first
@@ -317,7 +317,7 @@ def validate(result, expected_type="factual"):
 
     if expected_type == "factual":
         if is_mcq_format(q):
-            if not is_valid_mcq(q, result.get("correct_answer", "")):
+            if not is_valid_mcq(result):
                 return False
 
     return True
