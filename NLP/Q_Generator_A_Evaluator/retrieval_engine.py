@@ -104,16 +104,6 @@ def build_filter(topic, difficulty):
 # Retrieve Chunks (FINAL VERSION)
 # ─────────────────────────────────────────────
 
-# def build_bm25_index(collection):
-#     data = collection.get(include=["documents", "metadatas"])
-#     docs = data["documents"]
-#     metas = data["metadatas"]
-
-#     tokenized = [doc.lower().split() for doc in docs]
-#     bm25 = BM25Okapi(tokenized)
-
-#     return bm25, docs, metas
-
 def rrf_score(rank, k=60):
     return 1 / (k + rank)
 
@@ -204,8 +194,6 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
         collection
     )
 
-    query_variants = []
-
     query_variants = [
         topic,
         f"{topic} explanation",
@@ -245,7 +233,7 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
             include=["documents", "metadatas", "distances"]
         )
 
-        # 🔥 FALLBACK if no results
+        # FALLBACK if no results
         if len(results["documents"][0]) == 0:
             print("[DEBUG] No results with filter → fallback")
 
@@ -279,7 +267,6 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
         if key not in seen:
             seen.add(key)
             unique_chunks.append(c)
-
 
     # ─────────────────────────────────────────────
     # 4.5 BM25 Retrieval + RRF Fusion
@@ -337,7 +324,6 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
                 "score": 0
             }
 
-
     # ---- Assign fused score ----
     fused_chunks = []
 
@@ -355,6 +341,7 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
     final_chunks = []
     seen_subtopics = set()
     seen_text_keys = set()
+    
     # ─────────────────────────────────────────────
     # 5.1 Add metadata-based bonus (IMPORTANT)
     # ─────────────────────────────────────────────
