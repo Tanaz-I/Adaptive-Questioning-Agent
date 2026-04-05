@@ -277,7 +277,7 @@ def get_question():
 
     for attempt in range(5):
         s = rl.ks.get_state_vector()
-        a, _, _ = rl.select_action(s, training=False)
+        a= rl.select_action(s, training=False)[0]
         topic, diff, qtype = rl.mdp.decode(a)
 
         combo_key      = (topic, diff, qtype)
