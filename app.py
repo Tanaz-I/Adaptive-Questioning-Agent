@@ -4,9 +4,7 @@ import os
 import requests
 import pytesseract
 
-# ─────────────────────────────────────────────
-# TESSERACT PATH (Windows)
-# ─────────────────────────────────────────────
+
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 app = Flask(__name__)
@@ -26,9 +24,7 @@ state = {
 
 MAX_MEM = 10
 
-# ─────────────────────────────────────────────
-# SAFE REQUEST FIX
-# ─────────────────────────────────────────────
+
 original_post = requests.post
 
 def safe_post(*args, **kwargs):
@@ -54,10 +50,6 @@ def safe_post(*args, **kwargs):
 
 requests.post = safe_post
 
-
-# ─────────────────────────────────────────────
-# PATCH RL (avoid crash)
-# ─────────────────────────────────────────────
 def patch_knowledge_state():
     from Adaptation_RL.knowledge_state import KnowledgeState
 
@@ -76,11 +68,8 @@ def patch_knowledge_state():
     KnowledgeState.get_valid_actions = safe
 
 
-# ─────────────────────────────────────────────
-# PIPELINE (aligned with main.py)
-# ─────────────────────────────────────────────
 def run_pipeline():
-    print("🚀 Starting pipeline...")
+    print("Starting pipeline...")
 
     try:
         patch_knowledge_state()
@@ -136,7 +125,7 @@ def run_pipeline():
 
         topics_with_context = {t: sorted(topic_subtopics[t]) for t in canonical_topics}
 
-        # STEP 4: LLM infers prerequisites (from main.py)
+        # STEP 4: LLM infers prerequisites 
         valid_topics_str = json.dumps(canonical_topics, indent=2)
 
         prompt = f"""You are an expert in "{course}" at the {level} level.
@@ -188,7 +177,7 @@ JSON:"""
         dependencies = safe_parse_json(resp.json()["response"], fallback={})
         print(f"Prerequisites: {dependencies}")
 
-        # STEP 4b: Build concept graph (NEW from main.py)
+        # STEP 4b: Build concept graph 
         data = collection.get(include=["documents", "metadatas"])
         filtered_chunks = []
         for doc, meta in zip(data["documents"], data["metadatas"]):
@@ -249,36 +238,31 @@ JSON:"""
         state["topics_difficulty"] = topics_difficulty
 
         # STEP 6: RL Agent
-        from Adaptation_RL.Agent import AdaptiveAgent
+        from PPO_RL.PPOAgent import PPOAgent
 
-        rl = AdaptiveAgent(
+        rl = PPOAgent(
             topics_difficulty=topics_difficulty,
             prerequisites=dependencies,
-            w1=0.4, w2=0.5, w3=0.1
+            w1=0.4, w2=0.5, w3=0.1,use_lstm=True
         )
         state["rl"] = rl
 
-        # Reset session tracking
+       
         state["used_chunk_ids"]       = []
         state["asked_questions_log"]  = {}
         state["combo_question_count"] = {}
 
-        # STEP 7: First question
         state["current"] = get_question()
         state["ready"]   = True
 
-        print("✅ READY")
+        print("READY")
 
     except Exception as e:
-        print(f"❌ Pipeline error: {e}")
+        print(f"Pipeline error: {e}")
         import traceback
         traceback.print_exc()
         state["ready"] = False
 
-
-# ─────────────────────────────────────────────
-# QUESTION GENERATION (aligned with main.py)
-# ─────────────────────────────────────────────
 def get_question():
 
     diff_map_rl_to_nlp = {
@@ -301,7 +285,6 @@ def get_question():
         asked          = state["asked_questions_log"].get(topic, [])
         nlp_diff       = diff_map_rl_to_nlp[diff]
 
-        # generate_question returns (result, new_ids) per main.py
         result, new_ids = generate_question(
             topic,
             nlp_diff,
@@ -313,7 +296,6 @@ def get_question():
             used_chunk_ids=state["used_chunk_ids"]
         )
 
-        # Rolling used_chunk_ids memory (same as main.py)
         state["used_chunk_ids"].extend(new_ids)
         if len(state["used_chunk_ids"]) > MAX_MEM:
             state["used_chunk_ids"] = state["used_chunk_ids"][-MAX_MEM:]
@@ -332,7 +314,6 @@ def get_question():
 
         print(f"[WARN] Attempt {attempt+1}: Invalid question '{question}', retrying...")
 
-    # All retries failed
     return {
         "topic"     : topic,
         "difficulty": diff,
@@ -342,9 +323,6 @@ def get_question():
     }
 
 
-# ─────────────────────────────────────────────
-# ROUTES
-# ─────────────────────────────────────────────
 
 @app.route("/")
 def home():
@@ -362,7 +340,6 @@ def start():
     state["history"] = []
 
     threading.Thread(target=run_pipeline).start()
-
     return jsonify({"status": "processing"})
 
 
@@ -407,7 +384,6 @@ def submit():
         reward = rl.update(topic, score, diff, qtype)
         print(f"  RL Reward   : {round(reward, 3)}")
 
-        # Update combo + asked logs (same as main.py)
         combo_key = (topic, diff, qtype)
         state["combo_question_count"][combo_key] = \
             state["combo_question_count"].get(combo_key, 0) + 1
@@ -443,12 +419,6 @@ def next_q():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
-"""
-@app.route("/quit")
-def quit_session():
-    return jsonify({"history": state["history"]})
-"""
 
 @app.route("/quit")
 def quit_session():
@@ -510,7 +480,7 @@ def report():
         course_recs  = state.get("course_recs",  []),
     )
 
-# ─────────────────────────────────────────────
+
 if __name__ == "__main__":
-    print("🌐 Flask running...")
+    print("Flask running...")
     app.run(debug=True, use_reloader=False)

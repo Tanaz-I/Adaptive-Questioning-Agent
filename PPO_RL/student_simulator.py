@@ -37,9 +37,6 @@ PERSONAS = {
     },
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helper: call Ollama
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _call_llm(prompt, temperature = 0.6):
     response = requests.post(
@@ -55,19 +52,12 @@ def _call_llm(prompt, temperature = 0.6):
     response.raise_for_status()
     return response.json()["response"].strip()
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helper: build a "degraded" version of the reference for the weak student
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _degrade_reference(reference_answer, coverage):
-    """Return only the first `coverage` fraction of the reference answer sentences."""
     sentences = [s.strip() for s in reference_answer.replace("\n", " ").split(".") if s.strip()]
     keep = max(1, int(len(sentences) * coverage))
     return ". ".join(sentences[:keep]) + "."
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Core class
-# ─────────────────────────────────────────────────────────────────────────────
 
 class SimulatedStudent:
     """
@@ -83,15 +73,12 @@ class SimulatedStudent:
     """
 
     def __init__(self, student_type = "strong", seed = None):
-        #assert student_type in PERSONAS, f"student_type must be 'strong' or 'weak', got '{student_type}'"
         self.student_type = student_type
         self.persona      = PERSONAS[student_type]
         if seed is not None:
             random.seed(seed)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Public API
-    # ─────────────────────────────────────────────────────────────────────────
+    
 
     def answer(
         self,
@@ -101,24 +88,9 @@ class SimulatedStudent:
         difficulty,
         question_type,
     ):
-        """
-        Generate a simulated student answer.
-
-        Parameters
-        ----------
-        question         : the question text
-        reference_answer : the correct reference (used as hidden context)
-        topic            : topic name  (e.g. "Pointers")
-        difficulty       : "easy" / "medium" / "hard"  (or basic/intermediate/advanced)
-        question_type    : "factual" / "inferential" / "evaluative"
-
-        Returns
-        -------
-        str : simulated student answer
-        """
+        
         accuracy_prob = self.persona["accuracy"].get(difficulty, 0.5)
 
-        # decide whether this attempt is "good" or "bad" at a high level
         is_good_attempt = random.random() < accuracy_prob
 
         if is_good_attempt:
@@ -126,9 +98,6 @@ class SimulatedStudent:
         else:
             return self._generate_poor_answer(question, reference_answer, topic, difficulty, question_type)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Internal generators
-    # ─────────────────────────────────────────────────────────────────────────
 
     def _generate_good_answer(self, question, reference_answer, topic, difficulty, qtype):
         traits = "\n".join(f"- {t}" for t in self.persona["traits"])
@@ -160,7 +129,6 @@ Rules:
         return _call_llm(prompt, temperature=self.persona["temperature"])
 
     def _generate_poor_answer(self, question, reference_answer, topic, difficulty, qtype):
-        # give the weak student only a partial slice of the reference
         degraded = _degrade_reference(reference_answer, self.persona["coverage"])
 
         error_types = random.sample([

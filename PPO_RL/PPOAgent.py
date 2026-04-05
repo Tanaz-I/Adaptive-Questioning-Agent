@@ -247,7 +247,6 @@ class PPOAgent:
                     t = chunk_end
 
             else:
-                # ── MLP path: shuffle freely, no sequence dependency ──
                 indices = torch.randperm(n)
                 for start in range(0, n, self.mini_batch):
                     idx = indices[start: start + self.mini_batch]

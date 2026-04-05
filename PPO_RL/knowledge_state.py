@@ -30,13 +30,7 @@ class KnowledgeState:
             if not self.is_sufficiently_understood(prereq):
                 return False
         return True
-    """
-    def is_sufficiently_understood(self, topic):
-        topic_difficulty = self.topics_difficulty[topic]
-        sufficiency_thresh = {'basic' : 0.65, 'intermediate' : 0.55, 'advanced' : 0.45}
-        threshold = sufficiency_thresh[topic_difficulty]
-        return (self.attempts[topic] >= 5 and self.topic_score[topic] >= threshold and self.trend(topic) >= 0)
-    """
+    
     def is_sufficiently_understood(self, topic):
         topic_difficulty = self.topics_difficulty[topic]
         sufficiency_thresh = {'basic': 0.55, 'intermediate': 0.45, 'advanced': 0.35}  # lowered
