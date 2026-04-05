@@ -62,103 +62,333 @@ def call_llm(prompt, temperature=0.6):
 # ─────────────────────────────────────────────
 # Parse JSON
 # ─────────────────────────────────────────────
+# def parse_json(output):
+#     print(output)
+
+#     # ---- Extract code blocks ----
+#     code_blocks = re.findall(r'```.*?```', output, re.DOTALL)
+
+#     # clean code blocks
+#     clean_code = []
+#     for cb in code_blocks:
+#         cb = cb.replace("```cpp", "").replace("```", "").strip()
+#         clean_code.append(cb)
+
+#     code_text = "\n".join(clean_code)
+#     output = re.sub(r'```.*?```', '', output, flags=re.DOTALL)
+
+#     # ---- Try JSON first ----
+#     try:
+#         match = re.search(r'\{.*\}', output, re.DOTALL)
+
+#         if match:
+#             json_str = match.group(0)
+#             json_str = json_str.replace("\n", " ")
+#             json_str = json_str.replace('"""', '"')
+
+#             data = json.loads(json_str)
+
+#             question = data.get("question", "").strip()
+#             if code_text:
+#                 question = code_text + "\n" + question
+
+#             # 🔥 handle broken keys
+#             answer = data.get("reference_answer", "")
+
+#             # fallback: find any long string value
+#             if not answer:
+#                 for k, v in data.items():
+#                     if isinstance(v, str) and len(v.split()) > 5:
+#                         if k != "question":
+#                             answer += v
+#                             # break
+
+#             return {
+#                 "question": question,
+#                 "reference_answer": answer.strip()
+#             }
+#     except:
+#         pass
+
+#     print("Fallback Extraction")
+    # # ---- Fallback extraction ----
+
+    # start_question  = output.find("\"question\":")
+    # end_question = output.find("\"reference_answer\":")
+    # question = output[start_question: end_question + 1]
+    # answer = output[end_question : ]
+    # # lines = [l.strip() for l in output.split("\n") if l.strip()]
+
+    # # question = ""
+    # # answer = ""
+
+    # # # ---- Extract question ----
+    # # for i, line in enumerate(lines):
+    # #     if "?" in line:
+    # #         # include previous lines if code exists
+    # #         start_idx = 0  # include all previous lines
+    # #         question = "\n".join(lines[start_idx:i+1])
+    # #         break
+
+    # # # ---- Extract answer ----
+    # # for i, line in enumerate(lines):
+    # #     if "answer" in line.lower():
+    # #         answer = " ".join(lines[i: i+4])
+    # #         break
+
+    # # # fallback if not found
+    # # if not answer:
+    # #     answer = " ".join(lines[-4:])
+
+    # # # safety
+    # # if not question:
+    # #     question = "Error"
+    # # if not answer:
+    # #     answer = "Error"
+
+    # # # clean unwanted prefixes
+    # # # print(answer)
+    # # # print(question)
+    # question = question.replace('"question":', '').strip()
+    # question = question.replace('"""', '').strip()
+    # if code_text:
+    #     question = code_text + "\n" + question
+    # answer = answer.replace('"reference_answer":', '').strip()
+    # answer = answer.replace('"""', '').strip()
+
+    # return {
+    #     "question": question,
+    #     "reference_answer": answer
+    # }
 def parse_json(output):
     print(output)
 
-    # ---- Extract code blocks ----
-    code_blocks = re.findall(r'```.*?```', output, re.DOTALL)
+    # ─────────────────────────────────────────────
+    # Step 1: Extract ALL code blocks first
+    # Code blocks belong in the QUESTION only, never in the answer.
+    # ─────────────────────────────────────────────
+    code_blocks_found = []
 
-    # clean code blocks
-    clean_code = []
-    for cb in code_blocks:
-        cb = cb.replace("```cpp", "").replace("```", "").strip()
-        clean_code.append(cb)
+    def extract_and_replace_code(text):
+        blocks = []
+        pattern = re.compile(r'```(?:[a-zA-Z]*\n?)?(.*?)```', re.DOTALL)
 
-    code_text = "\n".join(clean_code)
-    output = re.sub(r'```.*?```', '', output, flags=re.DOTALL)
+        def replacer(match):
+            code = match.group(1).strip()
+            placeholder = f"__CODE_BLOCK_{len(blocks)}__"
+            blocks.append(code)
+            return placeholder
 
-    # ---- Try JSON first ----
-    try:
-        match = re.search(r'\{.*\}', output, re.DOTALL)
+        cleaned = pattern.sub(replacer, text)
+        return cleaned, blocks
 
-        if match:
-            json_str = match.group(0)
-            json_str = json_str.replace("\n", " ")
-            json_str = json_str.replace('"""', '"')
+    output_no_code, code_blocks_found = extract_and_replace_code(output)
 
-            data = json.loads(json_str)
+    # ─────────────────────────────────────────────
+    # Step 2: Restore helpers
+    # Code is ONLY restored into the question, never the answer.
+    # ─────────────────────────────────────────────
 
-            question = data.get("question", "").strip()
-            if code_text:
-                question = code_text + "\n" + question
+    def restore_code_in_question(text, blocks):
+        """Restore code placeholders into question text with triple backticks."""
+        for i, code in enumerate(blocks):
+            placeholder = f"__CODE_BLOCK_{i}__"
+            text = text.replace(placeholder, f"```\n{code}\n```")
+        return text
 
-            # 🔥 handle broken keys
-            answer = data.get("reference_answer", "")
+    def strip_code_placeholders_from_answer(text, blocks):
+        """
+        Remove any code placeholders that leaked into the answer.
+        The answer should be plain explanatory text only.
+        """
+        for i in range(len(blocks)):
+            placeholder = f"__CODE_BLOCK_{i}__"
+            text = text.replace(placeholder, "").strip()
+        return text
 
-            # fallback: find any long string value
-            if not answer:
-                for k, v in data.items():
-                    if isinstance(v, str) and len(v.split()) > 5:
-                        if k != "question":
-                            answer += v
-                            # break
+    # ─────────────────────────────────────────────
+    # Step 3: JSON parse on code-stripped output
+    # ─────────────────────────────────────────────
 
+    def try_parse_json_object(text):
+        text = re.sub(r'^```json\s*', '', text.strip())
+        text = re.sub(r'\s*```$', '', text.strip())
+
+        start = text.find("{")
+        end   = text.rfind("}") + 1
+        if start == -1 or end <= 0:
+            return None
+
+        json_str = text[start:end]
+        json_str = json_str.replace('"""', '"')
+
+        def collapse_newlines_in_strings(s):
+            result    = []
+            in_string = False
+            escape    = False
+            for ch in s:
+                if escape:
+                    result.append(ch)
+                    escape = False
+                elif ch == '\\':
+                    result.append(ch)
+                    escape = True
+                elif ch == '"' and not escape:
+                    in_string = not in_string
+                    result.append(ch)
+                elif ch == '\n' and in_string:
+                    result.append(' ')
+                else:
+                    result.append(ch)
+            return ''.join(result)
+
+        json_str = collapse_newlines_in_strings(json_str)
+
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            pass
+
+        # Regex fallback for broken JSON structure
+        q_match = re.search(
+            r'"question"\s*:\s*"((?:[^"\\]|\\.)*)"', json_str, re.DOTALL
+        )
+        a_match = re.search(
+            r'"reference_answer"\s*:\s*"((?:[^"\\]|\\.)*)"', json_str, re.DOTALL
+        )
+
+        if q_match and a_match:
             return {
-                "question": question,
-                "reference_answer": answer.strip()
+                "question"        : q_match.group(1).strip(),
+                "reference_answer": a_match.group(1).strip()
             }
-    except:
-        pass
 
-    print("Fallback Extraction")
-    # ---- Fallback extraction ----
+        return None
 
-    start_question  = output.find("\"question\":")
-    end_question = output.find("\"reference_answer\":")
-    question = output[start_question: end_question + 1]
-    answer = output[end_question : ]
-    # lines = [l.strip() for l in output.split("\n") if l.strip()]
+    # ── Attempt 1: parse with code replaced by placeholders ───────
+    data = try_parse_json_object(output_no_code)
 
-    # question = ""
-    # answer = ""
+    if data:
+        question = data.get("question", "").strip()
+        answer   = data.get("reference_answer", "")
+        options  = data.get("options", {})
+        correct  = data.get("correct_answer", "")
 
-    # # ---- Extract question ----
-    # for i, line in enumerate(lines):
-    #     if "?" in line:
-    #         # include previous lines if code exists
-    #         start_idx = 0  # include all previous lines
-    #         question = "\n".join(lines[start_idx:i+1])
-    #         break
+        # Code goes into question ONLY
+        question = restore_code_in_question(question, code_blocks_found)
+        answer   = strip_code_placeholders_from_answer(answer, code_blocks_found)
 
-    # # ---- Extract answer ----
-    # for i, line in enumerate(lines):
-    #     if "answer" in line.lower():
-    #         answer = " ".join(lines[i: i+4])
-    #         break
+        if not answer:
+            for k, v in data.items():
+                if isinstance(v, str) and len(v.split()) > 5 and k != "question":
+                    answer += v
+            # strip any code placeholders that came from fallback values too
+            answer = strip_code_placeholders_from_answer(answer, code_blocks_found)
 
-    # # fallback if not found
-    # if not answer:
-    #     answer = " ".join(lines[-4:])
+        result = {
+            "question"        : question,
+            "reference_answer": answer.strip()
+        }
+        for extra_key in ("options", "correct_answer"):
+            if extra_key in data:
+                result[extra_key] = data[extra_key]
 
-    # # safety
-    # if not question:
-    #     question = "Error"
-    # if not answer:
-    #     answer = "Error"
+        if options:
+            result["options"]        = options
+            result["correct_answer"] = correct
 
-    # # clean unwanted prefixes
-    # # print(answer)
-    # # print(question)
-    question = question.replace('"question":', '').strip()
-    question = question.replace('"""', '').strip()
-    if code_text:
-        question = code_text + "\n" + question
-    answer = answer.replace('"reference_answer":', '').strip()
-    answer = answer.replace('"""', '').strip()
+        return result
+
+    # ── Attempt 2: parse raw output directly ──────────────────────
+    data = try_parse_json_object(output)
+
+    if data:
+        question = data.get("question", "").strip()
+        answer   = data.get("reference_answer", "")
+
+        # Strip any raw backtick blocks from answer
+        answer = re.sub(r'```(?:[a-zA-Z]*\n?)?.*?```', '', answer, flags=re.DOTALL).strip()
+
+        if not answer:
+            for k, v in data.items():
+                if isinstance(v, str) and len(v.split()) > 5 and k != "question":
+                    answer += re.sub(r'```(?:[a-zA-Z]*\n?)?.*?```', '', v, flags=re.DOTALL)
+        result = {
+            "question"        : question,
+            "reference_answer": answer.strip()
+        }
+        for extra_key in ("options", "correct_answer"):
+            if extra_key in data:
+                result[extra_key] = data[extra_key]
+
+
+        return result
+
+    # ─────────────────────────────────────────────
+    # Step 4: Full structural fallback
+    # ─────────────────────────────────────────────
+
+    print("[parse_json] JSON parse failed — using structural fallback extraction")
+
+    question = ""
+    answer   = ""
+
+    # ── Extract question section ──────────────────────────────────
+    q_section_match = re.search(
+        r'"question"\s*:(.*?)"reference_answer"\s*:',
+        output,
+        re.DOTALL
+    )
+
+    if q_section_match:
+        raw_q = q_section_match.group(1).strip()
+        raw_q = re.sub(r'^"+', '', raw_q)
+        raw_q = re.sub(r'"+\s*,?\s*$', '', raw_q).strip()
+
+        # Restore code blocks into question
+        raw_q = restore_code_in_question(raw_q, code_blocks_found)
+
+        # Also catch raw code blocks still present in the question section
+        # of the original output (case 2: code outside backticks)
+        segment = q_section_match.group(1)
+        inline_codes = re.findall(r'```(?:[a-zA-Z]*\n?)?(.*?)```', segment, re.DOTALL)
+        for code in inline_codes:
+            if code.strip() and f"```\n{code.strip()}\n```" not in raw_q:
+                raw_q = f"```\n{code.strip()}\n```\n" + raw_q
+
+        question = raw_q
+
+    # ── Extract answer section ────────────────────────────────────
+    a_section_match = re.search(
+        r'"reference_answer"\s*:\s*"?(.*?)(?:"?\s*\}|$)',
+        output,
+        re.DOTALL
+    )
+
+    if a_section_match:
+        raw_a = a_section_match.group(1).strip()
+        raw_a = re.sub(r'^"+', '', raw_a)
+        raw_a = re.sub(r'"+\s*\}?\s*$', '', raw_a).strip()
+
+        # Strip ALL code blocks from answer — they don't belong here
+        raw_a = re.sub(r'```(?:[a-zA-Z]*\n?)?.*?```', '', raw_a, flags=re.DOTALL).strip()
+        raw_a = strip_code_placeholders_from_answer(raw_a, code_blocks_found)
+
+        answer = raw_a
+
+    # ── Final safety defaults ─────────────────────────────────────
+    if not question:
+        q_lines = [l.strip() for l in output.split('\n') if l.strip().endswith('?')]
+        question = q_lines[0] if q_lines else "Error"
+        if code_blocks_found and question != "Error":
+            question = f"```\n{code_blocks_found[0]}\n```\n" + question
+
+    if not answer:
+        answer = "Error"
 
     return {
-        "question": question,
-        "reference_answer": answer
+        "question"        : question.strip(),
+        "reference_answer": answer.strip()
     }
 
 # def parse_json(output):
@@ -285,6 +515,40 @@ def validate(result, expected_type="factual"):
 
 # def contains_code(text):
 #     return any(sym in text for sym in [";", "{", "}", "()", "class", "="])
+
+def build_code_decision_instruction(chunk, meta):
+    """
+    Returns a prompt instruction block that tells the LLM to self-assess
+    whether the content contains real executable code before using backticks.
+
+    Replaces the old build_code_injection() approach for question prompts.
+    The LLM decides — no hardcoded heuristics.
+    """
+    code_inj, code_rule = build_code_injection(chunk, meta)
+
+    if not code_inj:
+        # Metadata says no code — but still remind LLM not to wrap plain text
+        return """
+CODE DECISION (read before writing the question):
+- Does the content contain actual executable code (C++, Python, Java etc.)? 
+- If YES: include the relevant code snippet in the question using triple backticks.
+- If NO (content has bullet points, rules, definitions, prose): 
+  do NOT use triple backticks anywhere. Write a plain text question only.
+""", ""
+
+    # Metadata says code present — inject it but still let LLM verify
+    return f"""
+CODE DECISION (read before writing the question):
+The content appears to contain code. Before using it:
+- Ask yourself: is this actual executable/compilable code, or just
+  formatted text (bullet points, rules, numbered lists)?
+- If it is REAL CODE: include it verbatim in the question using triple backticks.
+- If it is formatted TEXT mistakenly detected as code: 
+  do NOT wrap it in backticks. Write a plain text question instead.
+
+Candidate code block (use only if truly executable):
+{code_inj}
+""", code_rule
 
 def extract_code_block(text):
     # First, check for markdown code blocks
@@ -476,16 +740,8 @@ def build_grounding_rule(meta):
 #     return parse_json(call_llm(prompt, temperature=0.6))
 
 def generate_factual_v2(chunk, meta, topic, difficulty, asked_questions):
-    """
-    Single LLM call.
-    Generates the question AND the answer in one shot.
-    The prompt instructs the model to:
-      - extract the answer directly if it is present in the content
-      - reason toward an answer using the content if it is not explicit
-    Replaces: generate_factual + is_answerable + generate_answer_with_llm
-    """
     avoid = build_avoid_str(asked_questions)
-    code_inj, code_rule = build_code_injection(chunk, meta)
+    code_decision, code_rule = build_code_decision_instruction(chunk, meta)
 
     diff_guide = {
         "easy":         "Ask for a direct definition or what something does.",
@@ -503,7 +759,8 @@ Difficulty: {difficulty}
 
 Content:
 {chunk}
-{code_inj}
+
+{code_decision}
 
 Your job has two parts:
 
@@ -515,54 +772,43 @@ Rules:
 - Must be rooted in the content above
 {code_rule}
 
+
+- CRITICAL: Do NOT write "as shown in the code", "consider the following code",
+  or any similar phrase UNLESS you are actually including a ``` code block
+  in the question. If there is no real executable code to show, write the
+  question in plain text without any reference to "the code".
+
 PART 2 — Write the reference answer.
-Answer strategy (pick ONE):
-  Strategy  — Reasoning from content:
-    If the answer is NOT stated explicitly but can be inferred from the content,
-    reason step by step using only what the content provides.Use keywords from content.
-    Do NOT use outside knowledge.
+Answer strategy:
+  Reason step by step using only what the content provides.
+  Do NOT use outside knowledge.
 
 Answer rules:
-- 2 - 4 complete sentences minimum
+- 2-4 complete sentences minimum
 - Use specific terms and variables from the content
 - Do NOT say "the content does not mention" — always provide an answer
+- The answer must be plain text only — NO code blocks, NO backticks in the answer
+- The answer explains concepts in words, not by showing code
+
 IMPORTANT:
 - The answer must be COMPLETE and FINAL
 - Do NOT describe what the answer will be
 - Do NOT say "the answer is based on..."
 - Directly give the final answer
-- Generate exactly ONE question and its answer.
+- Generate exactly ONE question and its answer
 
-Do NOT include:
-- "Here is the question"
-- "Here is the answer"
-- "Exam question"
-- "PART 1", "PART 2"
-
-For code questions:
-- Code must be outside JSON in ``` blocks
-- Include the exact output (if applicable)
-- Then explain briefly why
-
-STRICT OUTPUT FORMAT:
-- Output ONLY valid JSON
--If you include anything outside JSON, the answer is WRONG
-- Do NOT include any text before or after JSON
-- Do NOT say "Here is the answer"
-- Do NOT explain what you are doing
-- Use double quotes only
+Do NOT include: "Here is the question", "Here is the answer", "PART 1", "PART 2"
 
 STRICT JSON RULES:
+- Output ONLY valid JSON
 - All values must be single-line strings
 - Do NOT use triple quotes
-- Do NOT include line breaks inside JSON values
-- Replace newlines with spaces
-- Do NOT use ``` in output
-
+- Do NOT include line breaks inside JSON values — replace with spaces
+- The reference_answer value must NEVER contain backticks
 
 {avoid}
 
-Return ONLY valid JSON, no markdown, no explanation:
+Return ONLY valid JSON:
 {{"question": "...", "reference_answer": "..."}}"""
 
     return parse_json(call_llm(prompt, temperature=0.1))
@@ -729,6 +975,14 @@ Return ONLY valid JSON, no markdown, no explanation:
     if not is_valid_mcq(data):
         return None
 
+    stem = data.get("question", "").strip()
+
+    options_text = "\n".join(
+        f"{key} {value}"
+        for key, value in sorted(normalised_options.items())  # sorted: a) b) c) d)
+    )
+
+    data["question"] = f"{stem}\n\n{options_text}"
     return data
 
 # ─────────────────────────────────────────────
@@ -817,18 +1071,8 @@ Return ONLY valid JSON, no markdown, no explanation:
 
 #     return parse_json(call_llm(prompt, temperature=0.65))
 def generate_inferential_v2(chunk1, chunk2, meta2, topic, difficulty, asked_questions):
-    """
-    Single LLM call.
-    Replaces: find_connection + rewrite_inferential + generate_answer_with_llm
-
-    The prompt instructs the model to:
-      1. Identify the causal/functional relationship between the factual answer
-         and the new content (internal chain-of-thought, not returned)
-      2. Write an inferential question that requires that relationship
-      3. Write a reasoning-based answer that makes the connection explicit
-    """
     avoid = build_avoid_str(asked_questions)
-    code_inj, code_rule = build_code_injection(chunk2, meta2)
+    code_decision, code_rule = build_code_decision_instruction(chunk2, meta2)
 
     diff_guide = {
         "easy":         "one step of logic connecting the two ideas.",
@@ -849,74 +1093,59 @@ Difficulty: {difficulty}
 
 --- New content to connect to ---
 {chunk2}
-{code_inj}
+
+{code_decision}
 
 Your job has three parts:
 
 PART 1 — Identify the connection (internal reasoning, do NOT include in output):
-  Think: what is the causal or functional relationship between the student's
-  existing knowledge (the factual answer above) and the new content?
-  Be specific — how does one affect, enable, require, or constrain the other?
+  What is the causal or functional relationship between the existing content
+  and the new content? Be specific about how one affects, enables, requires,
+  or constrains the other.
 
 PART 2 — Write ONE inferential question.
 Rules:
 - Must start with: How, Why, Explain why, or What happens when
-- Must REQUIRE the student to use the connection you identified in Part 1
+- Must REQUIRE the student to use the connection from Part 1
 - Must NOT be answerable from either piece of content alone
 - Must NOT be answerable with a simple definition
 - Maximum 25 words
 - Reasoning required: {diff_guide}
 {code_rule}
 
+
+- CRITICAL: Do NOT write "as shown in the code", "consider the following code",
+  or any similar phrase UNLESS you are actually including a ``` code block
+  in the question. If there is no real executable code to show, write the
+  question in plain text without any reference to "the code".
+
 PART 3 — Write the reference answer.
 Rules:
-- First sentence must state the connection explicitly (the bridge between the two ideas)
-- 3-5 sentences total
-- Explain the mechanism, not just the conclusion
+- First sentence must state the connection explicitly
+- 3-5 sentences total, explain the mechanism not just the conclusion
 - Use specific terms from both content blocks
+- The answer must be plain text only — NO code blocks, NO backticks in the answer
+- The answer explains in words, not by showing code
 
 Answer rules:
-- 2 - 4 complete sentences minimum
-- Use specific terms and variables from the content
+- 2-4 complete sentences minimum
 - Do NOT say "the content does not mention" — always provide an answer
-IMPORTANT:
 - The answer must be COMPLETE and FINAL
-- TRY TO AVOID EXAMPLES not used in question
 - Do NOT describe what the answer will be
-- Do NOT say "the answer is based on..."
-- Directly give the final answer
--Generate exactly ONE question and its answer.
+- Generate exactly ONE question and its answer
 
-Do NOT include:
-- "Here is the question"
-- "Here is the answer"
-- "Exam question"
-- "PART 1", "PART 2"
-
-For code questions:
-- Include the exact output (if applicable)
--Code must be outside JSON in ``` blocks
-- Then explain briefly why
-
-STRICT OUTPUT FORMAT:
-- Output ONLY valid JSON
--If you include anything outside JSON, the answer is WRONG
-- DO NOT include PART 1, PART 2, PART 3
-- Do NOT include any text before or after JSON
-- Do NOT say "Here is the answer"
-- Do NOT explain what you are doing
-- Use double quotes only
+Do NOT include: "Here is the question", "Here is the answer", "PART 1", "PART 2", "PART 3"
 
 STRICT JSON RULES:
+- Output ONLY valid JSON
 - All values must be single-line strings
 - Do NOT use triple quotes
-- Do NOT include line breaks inside JSON values
-- Replace newlines with spaces
-- Do NOT use ``` in output
+- Do NOT include line breaks inside JSON values — replace with spaces
+- The reference_answer value must NEVER contain backticks
 
 {avoid}
 
-Return ONLY valid JSON, no markdown, no explanation:
+Return ONLY valid JSON:
 {{"question": "...", "reference_answer": "..."}}"""
 
     return parse_json(call_llm(prompt, temperature=0.15))
@@ -1002,18 +1231,9 @@ Return ONLY valid JSON, no markdown, no explanation:
 
 #     return parse_json(call_llm(prompt, temperature=0.7))
 def generate_evaluative_v2(chunk1, chunk2, chunk3, meta3, topic, difficulty, asked_questions):
-    """
-    Single LLM call.
-    Replaces: extract_concepts_from_answer + rewrite_evaluative + generate_answer_with_llm
-
-    The prompt instructs the model to:
-      1. Extract two key concepts from the inferential answer (internal)
-      2. Write an evaluative question that requires taking a position on those concepts
-      3. Write a justified answer with position + reasons + counterpoint
-    """
     import random
     avoid = build_avoid_str(asked_questions)
-    code_inj, code_rule = build_code_injection(chunk3, meta3)
+    code_decision, code_rule = build_code_decision_instruction(chunk3, meta3)
 
     frame_hint = random.choice([
         "Under what conditions would you prefer one approach over the other?",
@@ -1038,19 +1258,21 @@ def generate_evaluative_v2(chunk1, chunk2, chunk3, meta3, topic, difficulty, ask
 Topic: {topic}
 Difficulty: {difficulty}
 
---- Existing concepts(Assume students know these) ---
-{chunk1} and
+--- Existing concepts (assume students know these) ---
+{chunk1}
+
 {chunk2}
 
 --- Additional concepts ---
 {chunk3}
-{code_inj}
+
+{code_decision}
 
 Your job has three parts:
 
 PART 1 — Extract two key technical concepts (internal reasoning, do NOT include in output):
-  From the existing and additional concepts above, identify exactly two technical concepts being
-  discussed or compared. 
+  From the content above, identify exactly two technical concepts being
+  discussed or compared. Call them Concept A and Concept B.
 
 PART 2 — Write ONE evaluative question about those two concepts.
 Use this style as inspiration: "{frame_hint}"
@@ -1062,59 +1284,40 @@ Rules:
 - Evaluation depth required: {diff_guide}
 {code_rule}
 
+
+- CRITICAL: Do NOT write "as shown in the code", "consider the following code",
+  or any similar phrase UNLESS you are actually including a ``` code block
+  in the question. If there is no real executable code to show, write the
+  question in plain text without any reference to "the code".
+
+
 PART 3 — Write the reference answer.
 Rules:
-- Code must be outside JSON in ``` blocks
 - First sentence: state a clear position
-- Next 2-3 sentences: give specific reasons supporting the position,
-  referencing both Concept A and Concept B
+- Next 2-3 sentences: give specific reasons referencing both Concept A and Concept B
 - Final sentence: acknowledge one meaningful limitation or counterpoint
 - Minimum 4 sentences total
 - Use specific terms from the content
+- The answer must be plain text only — NO code blocks, NO backticks in the answer
+- The answer explains in words, not by showing code
 
 Answer rules:
-- 2 - 4 complete sentences minimum
-- Use specific terms and variables from the content
 - Do NOT say "the content does not mention" — always provide an answer
-
-IMPORTANT:
 - The answer must be COMPLETE and FINAL
-- TRY TO AVOID EXAMPLES not used in question
-- Do NOT describe what the answer will be
-- Do NOT say "the answer is based on..."
-- Directly give the final answer
--Generate exactly ONE question and its answer.
+- Generate exactly ONE question and its answer
 
-Do NOT include:
-- "Here is the question"
-- "Here is the answer"
-- "Exam question"
-- "PART 1", "PART 2"
-
-For code questions:
-- Include the exact output (if applicable)
-- Then explain briefly why
-
-STRICT OUTPUT FORMAT:
--If you include anything outside JSON, the answer is WRONG
-- - DO NOT include PART 1, PART 2, PART 3
-- DO NOT INCLUDE YOUR REASONING BEHIND QUESTION FRAMING IN THE OUTPUT
-- Output ONLY valid JSON
-- Do NOT include any text before or after JSON
-- Do NOT say "Here is the answer"
-- Do NOT explain what you are doing
-- Use double quotes only
+Do NOT include: "Here is the question", "Here is the answer", "PART 1", "PART 2", "PART 3"
 
 STRICT JSON RULES:
+- Output ONLY valid JSON
 - All values must be single-line strings
 - Do NOT use triple quotes
-- Do NOT include line breaks inside JSON values
-- Replace newlines with spaces
-- Do NOT use ``` in output
+- Do NOT include line breaks inside JSON values — replace with spaces
+- The reference_answer value must NEVER contain backticks
 
 {avoid}
 
-Return ONLY valid JSON, no markdown, no explanation:
+Return ONLY valid JSON:
 {{"question": "...", "reference_answer": "..."}}"""
 
     return parse_json(call_llm(prompt, temperature=0.2))
