@@ -57,7 +57,7 @@ class PPOAgent:
                                         prerequisites=prerequisites, window_size=10)
 
         if use_lstm:
-            # Separate lrs: lower for critic to prevent value head explosion
+           
             self.optimizer = torch.optim.AdamW([
                 {'params': self.ac_network.lstm.parameters(),        'lr': 1e-4},
                 {'params': self.ac_network.actor_fc.parameters(),    'lr': 1e-4},
@@ -246,7 +246,7 @@ class PPOAgent:
                     t = chunk_end
 
             else:
-                # ── MLP path: shuffle freely, no sequence dependency ──
+              
                 indices = torch.randperm(n)
                 for start in range(0, n, self.mini_batch):
                     idx = indices[start: start + self.mini_batch]

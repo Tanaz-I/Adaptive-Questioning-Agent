@@ -11,7 +11,6 @@ class ActorCriticMLP(nn.Module):
         hidden_size2    = (self.input_size + num_actions) // 2
 
         self.fc1     = nn.Linear(self.input_size, hidden_size1)
-        #self.fc2     = nn.Linear(hidden_size1, hidden_size2)
         self.dropout = nn.Dropout(dropout)
         
         self.actor_fc = nn.Linear(hidden_size1,hidden_size2)

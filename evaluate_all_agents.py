@@ -136,7 +136,6 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
 
     print("Pretraining done.\n")
 
-    # storage
     baseline_scores_all, baseline_mastered_all, baseline_per_topic_all = [], [], []
     reinforce_scores_all, reinforce_mastered_all, reinforce_per_topic_all = [], [], []
     ppo_scores_all, ppo_mastered_all, ppo_per_topic_all = [], [], []
@@ -242,8 +241,7 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
         dqn_mastered_per_topic, baseline_mastered_per_topic,
         n_students,
     )
-
-    # Plot 1: Score progression
+    
     reinforce_curve  = np.mean(reinforce_scores_all, axis=0)
     ppo_curve        = np.mean(ppo_scores_all,       axis=0)
     dqn_curve        = np.mean(dqn_scores_all,       axis=0)
@@ -262,7 +260,6 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     plt.tight_layout()
     plt.savefig('ComparisonPlots/score_all_agents.png', dpi=150)
 
-    # Plot 2: Per-topic mastery rate bar chart
     reinforce_mastery_rates = [reinforce_mastered_per_topic[t] / n_students for t in topics]
     ppo_mastery_rates       = [ppo_mastered_per_topic[t]       / n_students for t in topics]
     dqn_mastery_rates       = [dqn_mastered_per_topic[t]       / n_students for t in topics]

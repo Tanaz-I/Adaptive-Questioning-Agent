@@ -58,10 +58,10 @@ class DQNNetwork(nn.Module):
                 nn.init.constant_(m.bias, 0.0)
 
     def forward(self, state: torch.Tensor) -> torch.Tensor:
-        shared = self.shared(state)           # dropout only active in train mode
+        shared = self.shared(state)           
 
-        val = self.value_stream(shared)       # (B, 1)
-        adv = self.advantage_stream(shared)   # (B, A)
+        val = self.value_stream(shared)      
+        adv = self.advantage_stream(shared)  
 
         # Dueling: Q = V + (A - mean(A))
         q = val + (adv - adv.mean(dim=-1, keepdim=True))

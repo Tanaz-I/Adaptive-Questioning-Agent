@@ -66,7 +66,7 @@ class AdaptiveAgent:
         return mask
 
     def _reset_knowledge_state(self):
-        """Reset KnowledgeState and (if LSTM) the network hidden state."""
+       
         for topic in self.ks.topics:
             self.ks.topic_score[topic]   = 0.0
             self.ks.attempts[topic]      = 0
@@ -80,7 +80,7 @@ class AdaptiveAgent:
                 'earned_qtype_idx': 0,
             }
         self.ks.prev_topic = None
-        self.policy_network.reset_hidden()   # no-op for MLP, resets (h,c) for LSTM
+        self.policy_network.reset_hidden()   
 
 
     def select_action(self, state_vector, training: bool = False):

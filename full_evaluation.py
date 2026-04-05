@@ -4,23 +4,14 @@ from collections import defaultdict
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from PPO_Agent_3 import PPOAgent
-from Agent_1 import AdaptiveAgent
+from PPOAgent import PPOAgent
+from REINFORCEAgent import AdaptiveAgent
 from rule_based_agent import RuleBasedAgent
 
 
 
 def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student_nos=0):
-    """
-    Runs one evaluation session for either a rule-based or RL agent.
 
-    Returns
-    -------
-    score_progression      : list[float]        – score at each step
-    topics_mastered        : int                – total topics mastered
-    mastery_steps          : dict[str, int]     – step when topic mastered (-1 if never)
-    per_topic_qtype_scores : dict[str, dict[str, list[float]]]
-    """
     score_progression      = []
     mastery_steps          = {t: -1 for t in topics}
     per_topic_qtype_scores = defaultdict(lambda: defaultdict(list))
@@ -48,7 +39,6 @@ def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student
 
 
 def reset_rl_agent(agent, topics):
-    """Reset an RL agent's knowledge state between students."""
     for topic in topics:
         agent.ks.topic_score[topic]    = 0.0
         agent.ks.attempts[topic]       = 0
@@ -63,26 +53,12 @@ def reset_rl_agent(agent, topics):
         }
     agent.ks.prev_topic = None
 
-    # reset LSTM hidden state if the agent exposes one
     if hasattr(agent, 'reset_hidden'):
         agent.reset_hidden()
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Per-topic console report
-# ─────────────────────────────────────────────────────────────────────────────
-
 def print_per_topic_report(topics, topics_difficulty, agent_labels,
                             per_topic_all_list, mastered_per_topic_list, n_students):
-    """
-    Generic per-topic report for any number of agents.
-
-    Parameters
-    ----------
-    agent_labels         : list[str]                 e.g. ['REINFORCE', 'REINFORCE+LSTM', ...]
-    per_topic_all_list   : list[list[dict]]          one outer list per agent
-    mastered_per_topic_list : list[defaultdict(int)] one per agent
-    """
     print("\n" + "=" * 90)
     print("PER TOPIC BREAKDOWN")
     print("=" * 90)
@@ -110,11 +86,6 @@ def print_per_topic_report(topics, topics_difficulty, agent_labels,
             mastery_row += f"{mastered_per_topic[topic] / n_students:>{col_w}.1%}"
         print(mastery_row)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Summary table
-# ─────────────────────────────────────────────────────────────────────────────
-
 def print_summary_table(agent_labels, scores_all_list, mastered_all_list):
     col_w = 16
     header = f"{'Metric':<30}" + "".join(f"{lbl:>{col_w}}" for lbl in agent_labels)
@@ -133,10 +104,6 @@ def print_summary_table(agent_labels, scores_all_list, mastered_all_list):
     print(avg_scores_row)
     print(avg_master_row)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Plotting helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 STYLE = {
     'REINFORCE'      : dict(linestyle='-.', linewidth=2, color='steelblue'),
@@ -166,7 +133,7 @@ def plot_mastery_rates(topics, agent_labels, mastered_per_topic_list, n_students
                        save_path='Results/mastery_compare.png'):
     n_agents = len(agent_labels)
     x        = np.arange(len(topics))
-    width    = 0.8 / n_agents          # bars share the same unit width
+    width    = 0.8 / n_agents          
 
     plt.figure(figsize=(13, 5))
     colors = ['steelblue', 'dodgerblue', 'tomato', 'firebrick']
@@ -213,15 +180,7 @@ def plot_smoothed_progression(agent_labels, scores_all_list, window=50,
 def evaluate(topics_difficulty, prerequisites,
              w1=0.4, w2=0.5, w3=0.1,
              n_students=10, n_questions=500):
-    """
-    Compare four agents on n_students simulated students:
-        1. REINFORCE
-        2. REINFORCE + LSTM
-        3. PPO
-        4. PPO + LSTM
-
-    Each student uses an identical simulator state so comparisons are fair.
-    """
+    
     topics    = list(topics_difficulty.keys())
     simulator = Simulator(topic_difficulty=topics_difficulty)
 
@@ -242,7 +201,7 @@ def evaluate(topics_difficulty, prerequisites,
     ppo_lstm_agent = PPOAgent(topics_difficulty, prerequisites,
                                        w1=w1, w2=w2, w3=w3,use_lstm=True)
 
-    # Collect which agents are active
+    
     active_agents = [
         ('REINFORCE',      reinforce_agent,      True),
         ('REINFORCE+LSTM', reinforce_lstm_agent, True),
@@ -254,13 +213,11 @@ def evaluate(topics_difficulty, prerequisites,
 
     agent_labels = [lbl for lbl, _, _ in active_agents]
 
-    # ── Storage per agent ─────────────────────────────────────────────────────
     scores_all_list         = [[] for _ in active_agents]
     mastered_all_list       = [[] for _ in active_agents]
     per_topic_all_list      = [[] for _ in active_agents]
     mastered_per_topic_list = [defaultdict(int) for _ in active_agents]
 
-    # ── Student loop ──────────────────────────────────────────────────────────
     for student in range(n_students):
         simulator.reset_mastery_scores()
         saved_mastery = simulator.mastery_topic.copy()
@@ -268,7 +225,7 @@ def evaluate(topics_difficulty, prerequisites,
         row_parts = [f"Student {student+1:02d}"]
 
         for idx, (label, agent, is_rl) in enumerate(active_agents):
-            # restore identical student state
+           
             simulator.mastery_topic = saved_mastery.copy()
 
             if is_rl:
@@ -292,10 +249,10 @@ def evaluate(topics_difficulty, prerequisites,
 
         print(" | ".join(row_parts))
 
-    # ── Summary table ─────────────────────────────────────────────────────────
+    
     print_summary_table(agent_labels, scores_all_list, mastered_all_list)
 
-    # ── Per-topic breakdown ───────────────────────────────────────────────────
+  
     print_per_topic_report(
         topics, topics_difficulty,
         agent_labels,
@@ -304,15 +261,12 @@ def evaluate(topics_difficulty, prerequisites,
         n_students
     )
 
-    # ── Plots ─────────────────────────────────────────────────────────────────
     plot_score_progression(agent_labels, scores_all_list)
     plot_smoothed_progression(agent_labels, scores_all_list)
     plot_mastery_rates(topics, agent_labels, mastered_per_topic_list, n_students)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Entry point
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 if __name__ == "__main__":
     topics_difficulty = {

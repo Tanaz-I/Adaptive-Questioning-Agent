@@ -19,7 +19,7 @@ def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student
         if is_rl:
             state_vector = agent.ks.get_state_vector()
             result = agent.select_action(state_vector, training=False)
-            action_idx = result[0]  # just take first element regardless of how many values returned
+            action_idx = result[0] 
             topic, diff, qtype = agent.mdp.decode(action_idx)
         else:
             topic, diff, qtype  = agent.select_action()
@@ -84,10 +84,6 @@ def print_per_topic_report(topics, topics_difficulty,
 
 
 def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_students=10, n_questions=500):
-    """
-    Compare RL agent vs rule-based baseline on n_students simulated students.
-    Both agents face identical simulated students for fair comparison.
-    """
     topics    = list(topics_difficulty.keys())
     simulator = Simulator(topic_difficulty=topics_difficulty)
     
@@ -100,10 +96,6 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     print("Pretraining REINFORCE agent...")
     reinforce_agent = AdaptiveAgent(topics_difficulty, prerequisites, w1=w1, w2=w2, w3=w3) 
     
-
-    
-
-    # storage
     baseline_scores_all         = []
     baseline_mastered_all       = []
     baseline_per_topic_all      = []
@@ -115,36 +107,27 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     ppo_mastered_per_topic = defaultdict(int)
 
     for student in range(n_students):
-
-        # generate fresh student and save state for fair comparison
         simulator.reset_mastery_scores()
         saved_mastery = simulator.mastery_topic.copy()
 
-        # --- run baseline ---
+       
         baseline_agent.reset(topics_difficulty)
         simulator.mastery_topic = saved_mastery.copy()
         b_scores, b_mastered, b_mastery_steps, b_per_topic = run_agent_session(
             baseline_agent, simulator, topics, n_questions, is_rl=False, student_nos = student
         )
         
-         # REINFORCE
+        
         reset_rl_agent(reinforce_agent, topics)
         simulator.mastery_topic = saved_mastery.copy()
         r_scores, r_mastered, r_mastery_steps, r_per_topic = run_agent_session(
             reinforce_agent, simulator, topics, n_questions, is_rl=True)
 
-        # PPO
+        
         reset_rl_agent(ppo_agent, topics)
         simulator.mastery_topic = saved_mastery.copy()
         p_scores, p_mastered, p_mastery_steps, p_per_topic = run_agent_session(
             ppo_agent, simulator, topics, n_questions, is_rl=True)
-
-        """# --- run RL agent (same student) ---
-        reset_rl_agent(rl_agent, topics)
-        simulator.mastery_topic = saved_mastery.copy()
-        rl_scores, rl_mastered, rl_mastery_steps, rl_per_topic = run_agent_session(
-            rl_agent, simulator, topics, n_questions, is_rl=True, student_nos = student
-        )"""
 
         
         reinforce_scores_all.append(r_scores)
@@ -159,7 +142,6 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
         baseline_mastered_all.append(b_mastered)
         baseline_per_topic_all.append(b_per_topic)
 
-        # track per-topic mastery counts
         for topic in topics:
             if r_mastery_steps[topic] != -1:
                 reinforce_mastered_per_topic[topic] += 1
@@ -190,23 +172,18 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     ppo_mean_curve       = np.mean(ppo_scores_all, axis=0)
     baseline_mean_curve  = np.mean(baseline_scores_all, axis=0)
 
-    # per topic breakdown
     print_per_topic_report(
         topics, topics_difficulty,
         reinforce_per_topic_all, ppo_per_topic_all, baseline_per_topic_all,
         reinforce_mastered_per_topic, ppo_mastered_per_topic, baseline_mastered_per_topic,
         n_students
-    )
-
-    
+    )   
 
 
     plt.figure(figsize=(10, 5))
     plt.plot(reinforce_mean_curve, label='REINFORCE', linewidth=2, linestyle='-.')
     plt.plot(ppo_mean_curve,       label='PPO',       linewidth=2)
     plt.plot(baseline_mean_curve,  label='Baseline',  linewidth=2, linestyle='--')
-    #plt.plot(rl_mean_curve,       label='RL Agent', linewidth=2)
-    #plt.plot(baseline_mean_curve, label='Baseline', linewidth=2, linestyle='--')
     plt.xlabel('Question Number')
     plt.ylabel('Score')
     plt.title('Score Progression — RL Agent vs Rule-Based Baseline')
@@ -214,9 +191,7 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
     plt.grid(True)
     plt.tight_layout()
     plt.savefig('ComparisonPlots/score_RLAgentvsRule-Based Baseline.png', dpi=150)
-    #plt.show()
-
-    # 2. Per-topic mastery rate bar chart
+    
     reinforce_mastery_rates = [reinforce_mastered_per_topic[t] / n_students for t in topics]
     ppo_mastery_rates       = [ppo_mastered_per_topic[t]       / n_students for t in topics]
     b_mastery_rates         = [baseline_mastered_per_topic[t]  / n_students for t in topics]
@@ -238,23 +213,7 @@ def evaluate(topics_difficulty, prerequisites, w1=0.4, w2=0.5, w3=0.1, n_student
 
 
 
-if __name__ == "__main__":
-    """topics_difficulty = {
-        "Neural Networks"     : "advanced",
-        "Gradient Descent"    : "intermediate",
-        "Backpropagation"     : "advanced",
-        "Activation Functions": "basic",
-        "Overfitting"         : "intermediate"
-    }
-
-    prerequisites = {
-        "Neural Networks"     : [],
-        "Gradient Descent"    : [],
-        "Activation Functions": [],
-        "Overfitting"         : ["Neural Networks"],
-        "Backpropagation"     : ["Neural Networks", "Gradient Descent"]
-    }"""
-    
+if __name__ == "__main__":    
     topics_difficulty = {
 
     # Level 0

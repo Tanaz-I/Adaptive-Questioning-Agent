@@ -32,17 +32,9 @@ class RuleBasedAgent:
         self.total_steps = 0
 
 
-    # ---------------------------------------------------
-    # mastery check
-    # ---------------------------------------------------
 
     def is_mastered(self, topic):
         return self.ks.is_mastered(topic)
-
-
-    # ---------------------------------------------------
-    # topic priority
-    # ---------------------------------------------------
 
     def _topic_priority(self, topic):
 
@@ -60,10 +52,6 @@ class RuleBasedAgent:
         )
         return priority
 
-
-    # ---------------------------------------------------
-    # topic selection
-    # ---------------------------------------------------
 
     def _pick_topic(self):
 
@@ -95,10 +83,6 @@ class RuleBasedAgent:
         return best_topic
 
 
-    # ---------------------------------------------------
-    # difficulty + question type selection
-    # ---------------------------------------------------
-
     def _pick_diff_qtype(self, topic):
 
         avg_score = (
@@ -118,7 +102,7 @@ class RuleBasedAgent:
             trend = 0.0
 
 
-        # fairness constraint
+        
         valid_combos = self.ks.get_valid_actions(topic)
 
         if not valid_combos:
@@ -142,7 +126,6 @@ class RuleBasedAgent:
         )
 
 
-        # ensure minimum exposure among VALID combos
         if combo_counts[least_practiced] < MIN_COMBO_EXPOSURE:
 
             diff_idx = difficulty_level.index(least_practiced[0])
@@ -153,8 +136,6 @@ class RuleBasedAgent:
 
             return least_practiced
 
-
-        # adaptive progression
         topic_level = self.ks.topics_difficulty[topic]
 
         master_thresh = {
@@ -194,9 +175,6 @@ class RuleBasedAgent:
         return candidate_combo
 
 
-    # ---------------------------------------------------
-    # public API
-    # ---------------------------------------------------
 
     def select_action(self):
         topic = self._pick_topic()
@@ -210,10 +188,6 @@ class RuleBasedAgent:
         self.recent_scores[topic].append(score)
         self.ks.update(topic, score, difficulty, question_type)
 
-
-    # ---------------------------------------------------
-    # reset between students
-    # ---------------------------------------------------
 
     def reset(self, topics_difficulty):
         self.curr_diff_idx = {t: 0 for t in self.topics}

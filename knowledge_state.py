@@ -5,10 +5,10 @@ from collections import defaultdict, deque
 class KnowledgeState:
     
     def __init__(self, topics_difficulty, window_size, prerequisites):        
-        self.topics_difficulty = topics_difficulty # dictionary of topic:difficulty
+        self.topics_difficulty = topics_difficulty 
         self.prerequisites_topic = prerequisites
         self.topics = list(self.topics_difficulty.keys())
-        self.window_size  = window_size  #window size for the trend
+        self.window_size  = window_size  
         self.num_topics = len(topics_difficulty)
         self.topic_score = defaultdict(float)
         self.recent_scores = defaultdict(lambda: deque(maxlen=window_size))  
@@ -30,13 +30,7 @@ class KnowledgeState:
             if not self.is_sufficiently_understood(prereq):
                 return False
         return True
-    """
-    def is_sufficiently_understood(self, topic):
-        topic_difficulty = self.topics_difficulty[topic]
-        sufficiency_thresh = {'basic' : 0.65, 'intermediate' : 0.55, 'advanced' : 0.45}
-        threshold = sufficiency_thresh[topic_difficulty]
-        return (self.attempts[topic] >= 5 and self.topic_score[topic] >= threshold and self.trend(topic) >= 0)
-    """
+   
     def is_sufficiently_understood(self, topic):
         topic_difficulty = self.topics_difficulty[topic]
         sufficiency_thresh = {'basic': 0.55, 'intermediate': 0.45, 'advanced': 0.35}  # lowered
@@ -57,14 +51,14 @@ class KnowledgeState:
     def get_combo_threshold(self, topic, difficulty, question_type):
         topic_base = self.master_thresh[self.topics_difficulty[topic]]
         
-        # adjustment based on question difficulty
+       
         diff_adjustment = {
             'basic'        :  0.10,   
             'intermediate' :  0.05,
             'advanced'     :  0.00    
         }
         
-        # adjustment based on question type
+        
         qtype_adjustment = {
             'factual'     :  0.05,   
             'inferential' :  0.02,
@@ -93,12 +87,12 @@ class KnowledgeState:
         
         valid = []
         
-        # all levels at or below current
+        
         for d in range(curr_diff_idx + 1):
             for q in range(curr_qtype_idx + 1):
                 valid.append((difficulty_level[d], question_types[q]))
         
-        # one step ahead — qtype first, then difficulty
+    
         if curr_qtype_idx < 2:
             valid.append(( difficulty_level[curr_diff_idx], question_types[curr_qtype_idx + 1]))
         elif curr_diff_idx < 2:
