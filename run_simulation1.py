@@ -103,9 +103,9 @@ SUMMARY_CSV_FIELDS = [
 # ─────────────────────────────────────────────
 
 def build_pipeline():
-    knowledge_base_construction.run_pipeline(DOCS_DIR)
-    enrich_metadata.enrich_metadata()
-    topic_extraction.run_global_topic_extraction()
+    # knowledge_base_construction.run_pipeline(DOCS_DIR)
+    # enrich_metadata.enrich_metadata()
+    # topic_extraction.run_global_topic_extraction()
 
     client = chromadb.PersistentClient(
         path=CHROMA_DB_DIR,
@@ -224,7 +224,7 @@ def run_simulation(
     combo_question_count = {}
     asked_questions_log  = {}
     used_chunk_ids       = []
-    MAX_MEM              = 10
+    MAX_MEM              = 50
 
     # ── Open summary CSV for incremental writing ───────────────────────────
     # Flushed after every row — safe even if simulation crashes mid-run.
