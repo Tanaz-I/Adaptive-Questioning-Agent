@@ -2,5 +2,7 @@
   "Constructors",
   "Destructors",
   "Object Oriented Programming",
-  "Pointers to class members"
+  "Operator Functions as Class Members",
+  "Operator Functions as Friend Functions",
+  "Operator Overloading"
 ]

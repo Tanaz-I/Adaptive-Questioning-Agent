@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Adaptive Learning Agent</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>Adaptive Learning Agent</h1>
+
+  <!-- Upload Section -->
+  <div id="uploadBox" class="card">
+    <input type="file" id="file" />
+    <button onclick="start()">Start Learning</button>
+  </div>
+
+  <!-- Loader -->
+  <div id="loading" class="hidden">
+    <div class="spinner"></div>
+    <p>Training RL Agent & Preparing Questions...</p>
+  </div>
+
+  <!-- Question Section -->
+  <div id="qaBox" class="hidden card">
+
+    <h3>Question</h3>
+    <p id="question"></p>
+
+    <!-- 🔥 FIX: prevent empty submission + better UX -->
+    <textarea id="answer" placeholder="Type your answer here..." rows="6"></textarea>
+
+    <!-- 🔥 FIX: disable button until input -->
+    <button id="submitBtn" onclick="submitAnswer()">Submit Answer</button>
+
+    <!-- Result -->
+    <div id="result" class="result hidden"></div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button onclick="nextQ()">Next</button>
+      <button class="danger" onclick="quit()">Quit</button>
+    </div>
+
+  </div>
+
+  <!-- Summary -->
+  <div id="summary" class="card hidden"></div>
+
+</div>
+
+<script src="/static/script.js"></script>
+
+<!-- 🔥 OPTIONAL UX IMPROVEMENT -->
+<script>
+  // Enable submit button only when typing
+  const textarea = document.getElementById("answer");
+  const submitBtn = document.getElementById("submitBtn");
+
+  textarea.addEventListener("input", () => {
+    submitBtn.disabled = textarea.value.trim() === "";
+  });
+</script>
+
+</body>
+</html>

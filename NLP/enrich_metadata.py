@@ -416,7 +416,7 @@ def preview(n: int = 5):
 
     print(f"\n Sample of {n} enriched chunks \n")
     for doc, meta in zip(data["documents"], data["metadatas"]):
-        print(f"  File      : {meta.get('file_name')}  Slide {meta.get('slide_number')}")
+        print(f"  File      : {meta.get('file_name')}  Slide {meta.get('page_number')}")
         print(f"  Topic     : {meta.get('topic')}  ->  {meta.get('subtopic')}")
         print(f"  Type      : {meta.get('concept_type')}  |  Difficulty: {meta.get('difficulty')}")
         print(f"  Keywords  : {meta.get('keywords')}")

@@ -7,12 +7,13 @@ from Adaptation_RL.Agent import AdaptiveAgent
 from NLP import knowledge_base_construction, enrich_metadata, rag_query_engine, topic_extraction
 from NLP.Q_Generator_A_Evaluator.answer_evaluator import evaluate_answer
 from NLP.Q_Generator_A_Evaluator.question_generator import generate_question
+from NLP.concept_graph import build_concept_graph
 
 DOCS_DIR        = "./contents"
 CHROMA_DB_DIR   = "./chroma_db"
 COLLECTION_NAME = "rag_kb"
 OLLAMA_URL      = "http://localhost:11434/api/generate"
-OLLAMA_MODEL    = "llama3:8b"
+OLLAMA_MODEL    = "llama3"
 
 # ─────────────────────────────────────────────
 # Step 1 — Build Knowledge Base
@@ -102,7 +103,7 @@ response = requests.post(
             "num_predict": 200,
         },
     },
-    timeout=60,
+    timeout=6000,
 )
 
 def safe_parse_json(raw, fallback):
@@ -126,6 +127,32 @@ def safe_parse_json(raw, fallback):
 
 dependencies = safe_parse_json(response.json()["response"], fallback={})
 print(f"Prerequisites: {dependencies}")
+
+data = collection.get(include=["documents", "metadatas"])
+filtered_chunks = []
+
+for doc, meta in zip(data["documents"], data["metadatas"]):
+
+    if meta.get("topic") in (None, "", "Unknown"):
+        continue
+
+    # prioritize useful chunks
+    if meta.get("concept_type") in ["definition", "explanation", "example"]:
+        filtered_chunks.append({
+            "text": doc,
+            "topic": meta.get("topic"),
+            "subtopic": meta.get("subtopic")
+        })
+
+filtered_chunks = filtered_chunks[:150]
+
+concept_graph = build_concept_graph(filtered_chunks)
+print(f"[Graph] Nodes: {len(concept_graph)}")
+
+sample_keys = list(concept_graph.keys())[:5]
+print("[Graph Sample]:", sample_keys)
+
+print("[Graph] Done.\n")
 
 # ─────────────────────────────────────────────
 # Step 5 — Compute Topic Difficulty (mode)
@@ -199,6 +226,8 @@ session_log  = []
 combo_question_count = {}
 asked_questions_log = {}
 
+used_chunk_ids = [] #Not exact chunk ids but chunk text trimmed to some length
+MAX_MEM = 10
 for step in range(N_QUESTIONS):
 
     print(f"\n{'='*60}")
@@ -220,13 +249,19 @@ for step in range(N_QUESTIONS):
     question_count = combo_question_count.get(combo_key, 0)
     asked = asked_questions_log.get(topic, [])
     nlp_diff = diff_map_rl_to_nlp[diff]
-    result = generate_question(
+    result, new_ids = generate_question(
         topic,
         nlp_diff,
         qtype,
         question_count=question_count,
-        asked_questions=asked
+        asked_questions=asked,
+        prerequisites=dependencies,
+        concept_graph=concept_graph,
+        used_chunk_ids = used_chunk_ids
     )
+    used_chunk_ids.extend(new_ids)
+    if len(used_chunk_ids) > MAX_MEM:
+        used_chunk_ids = used_chunk_ids[-MAX_MEM:]
 
     question         = result['question']
     reference_answer = result['reference_answer']
@@ -247,7 +282,7 @@ for step in range(N_QUESTIONS):
         continue
 
     # ── 7d. NLP evaluates answer ─────────────────────────────
-    eval_result = evaluate_answer(student_answer, reference_answer, qtype)
+    eval_result = evaluate_answer(student_answer, reference_answer, qtype, question)
     score       = eval_result['final_score']
 
     print(f"\nEvaluation:")
@@ -286,6 +321,7 @@ for step in range(N_QUESTIONS):
         asked_questions_log[topic] = []
 
     asked_questions_log[topic].append(result["question"])
+
 # ─────────────────────────────────────────────
 # Step 8 — Session Summary
 # ─────────────────────────────────────────────
