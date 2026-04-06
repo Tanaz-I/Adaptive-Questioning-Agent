@@ -90,14 +90,12 @@ def get_bm25_index():
 # Build Filter (CORE FIX)
 # ─────────────────────────────────────────────
 
-def build_filter(topic, difficulty):
-
-    return {
-        "$or": [
-            {"topic": topic},
-            {"subtopic": topic}
-        ]
-    }
+def build_filter(topics: list):
+    conditions = []
+    for t in topics:
+        conditions.append({"topic": t})
+        conditions.append({"subtopic": t})
+    return {"$or": conditions}
 
 
 # ─────────────────────────────────────────────
@@ -107,16 +105,74 @@ def build_filter(topic, difficulty):
 def rrf_score(rank, k=60):
     return 1 / (k + rank)
 
+# def expand_topic_smart_with_prereq_concept_graph(topic, prerequisites, concept_graph, collection):
+#     """
+#     Smart topic expansion:
+#     - Expands ONLY if insufficient chunks exist
+#     - Adds at most:
+#         • 1 prerequisite
+#         • 2 strongly connected graph neighbors
+#     """
+
+#     # ---- Step 1: count exact topic chunks ----
+#     try:
+#         results = collection.get(
+#             where={"topic": topic},
+#             include=["documents"]
+#         )
+#         n_exact = len(results.get("documents", []))
+#     except Exception:
+#         n_exact = 10  # assume sufficient → skip expansion
+
+#     expanded = [topic]
+
+#     # ---- Step 2: expand ONLY if needed ----
+#     if n_exact < 5:
+
+#         # ---- add ONE prerequisite (most relevant = last) ----
+#         if prerequisites:
+#             prereqs = prerequisites.get(topic, [])
+#             if prereqs:
+#                 expanded.append(prereqs[-1])
+
+#         # ---- add top-2 graph neighbors (most connected) ----
+#         if concept_graph:
+#             topic_key = topic.lower()
+
+#             if topic_key in concept_graph:
+#                 neighbors = list(concept_graph[topic_key])
+
+#                 # sort by connectivity (degree)
+#                 neighbors = sorted(
+#                     neighbors,
+#                     key=lambda n: len(concept_graph.get(n, [])),
+#                     reverse=True
+#                 )
+
+#                 expanded.extend(neighbors[:2])
+
+#     # ---- Step 3: deduplicate while preserving order ----
+#     seen = set()
+#     final = []
+
+#     for t in expanded:
+#         t_clean = t.strip()
+#         if t_clean and t_clean not in seen:
+#             seen.add(t_clean)
+#             final.append(t_clean)
+
+#     return final
+
 def expand_topic_smart_with_prereq_concept_graph(topic, prerequisites, concept_graph, collection):
     """
     Smart topic expansion:
-    - Expands ONLY if insufficient chunks exist
-    - Adds at most:
-        • 1 prerequisite
-        • 2 strongly connected graph neighbors
+    - Expands ONLY if insufficient chunks exist for the topic
+    - Returns:
+        expanded_topics  : list of topic-level strings for ChromaDB filter + BM25
+        concept_keywords : list of concept-level strings for query text enrichment only
     """
 
-    # ---- Step 1: count exact topic chunks ----
+    # ── Step 1: count exact topic chunks ────────────────────────
     try:
         results = collection.get(
             where={"topic": topic},
@@ -128,42 +184,59 @@ def expand_topic_smart_with_prereq_concept_graph(topic, prerequisites, concept_g
 
     expanded = [topic]
 
-    # ---- Step 2: expand ONLY if needed ----
+    # ── Step 2: expand topic-level list (for filter) ─────────────
+    # Only fires when the topic is genuinely sparse
     if n_exact < 5:
 
-        # ---- add ONE prerequisite (most relevant = last) ----
+        # Add ONE prerequisite topic (last = most recent/relevant)
         if prerequisites:
             prereqs = prerequisites.get(topic, [])
             if prereqs:
                 expanded.append(prereqs[-1])
 
-        # ---- add top-2 graph neighbors (most connected) ----
-        if concept_graph:
-            topic_key = topic.lower()
+    # ── Step 3: collect concept keywords (for query text only) ───
+    # concept_graph keys are concept-level strings like "pointer arithmetic",
+    # NOT topic-level strings like "Pointers to Class Members".
+    # So we NEVER add them to expanded (filter), only use them to
+    # enrich query text so the embedding search finds more relevant chunks.
+    concept_keywords = []
+    if concept_graph:
+        # Try progressively looser key matches:
+        # 1. Full topic lowercased       e.g. "pointers to class members"
+        # 2. Each individual word        e.g. "pointers", "class", "members"
+        # 3. Each bigram in the topic    e.g. "pointers to", "to class", "class members"
+        topic_lower = topic.lower()
+        topic_words = topic_lower.split()
 
-            if topic_key in concept_graph:
-                neighbors = list(concept_graph[topic_key])
+        bigrams = [
+            f"{topic_words[i]} {topic_words[i+1]}"
+            for i in range(len(topic_words) - 1)
+        ] if len(topic_words) >= 2 else []
 
-                # sort by connectivity (degree)
+        candidate_keys = [topic_lower] + bigrams + topic_words
+
+        for key in candidate_keys:
+            if key in concept_graph:
+                neighbors = list(concept_graph[key])
+                # Sort by connectivity degree — most central concepts first
                 neighbors = sorted(
                     neighbors,
                     key=lambda n: len(concept_graph.get(n, [])),
                     reverse=True
                 )
+                concept_keywords.extend(neighbors[:2])
+                break  # stop at first key that hits — avoid over-expansion
 
-                expanded.extend(neighbors[:2])
-
-    # ---- Step 3: deduplicate while preserving order ----
+    # ── Step 4: deduplicate expanded_topics, preserving order ────
     seen = set()
     final = []
-
     for t in expanded:
         t_clean = t.strip()
         if t_clean and t_clean not in seen:
             seen.add(t_clean)
             final.append(t_clean)
 
-    return final
+    return final, concept_keywords
 
 def difficulty_match_bonus(chunk_diff, requested_diff):
     req = DIFF_ORDER.get(requested_diff, 1)
@@ -187,35 +260,24 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
     # ─────────────────────────────────────────────
     # 1. Build richer query (QUERY EXPANSION)
     # ─────────────────────────────────────────────
-    expanded_topics = expand_topic_smart_with_prereq_concept_graph(
-        topic,
+    
+    expanded_topics, concept_keywords = expand_topic_smart_with_prereq_concept_graph(topic,
         prerequisites,
         concept_graph,
-        collection
-    )
+        collection)
 
-    query_variants = [
-        topic,
-        f"{topic} explanation",
-        f"{topic} example",
-        f"{topic} definition",
-        f"{topic} concepts",
-        f"{topic} applications"
-    ]
+    query_variants = [topic, f"{topic} explanation", f"{topic} example",
+                    f"{topic} definition", f"{topic} concepts", f"{topic} applications"]
 
+    # add concept keyword enriched queries (these stay as query text only, not filter)
+    for kw in concept_keywords:
+        query_variants.append(f"{topic} {kw}")
+
+    # add prerequisite/expanded topic queries
     for t in expanded_topics[1:]:
-        query_variants.extend([
-            t,
-            f"{t} explanation",
-            f"{t} example",
-            f"{t} definition",
-        ])
-    
+        query_variants.extend([t, f"{t} explanation", f"{t} example", f"{t} definition"])
 
-    # ─────────────────────────────────────────────
-    # 2. Metadata filter (same as before)
-    # ─────────────────────────────────────────────
-    filter_condition = build_filter(topic, difficulty)
+    filter_condition = build_filter(expanded_topics)
 
     all_results = []
 
