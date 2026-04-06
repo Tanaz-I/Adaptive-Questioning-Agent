@@ -551,12 +551,13 @@ if __name__ == "__main__":
     # print("\n" + "="*50 + "\n")
 
     # TEST 2: Subtopic-based (IMPORTANT)
-    chunks = retrieve_chunks(
-    topic="Pointers to Class Members",
+    chunks, _ = retrieve_chunks(
+    topic="Constructors",
     difficulty="medium",
     question_type="inferential")
 
     print("\nSubtopics retrieved:")
+    # print(chunks)
     print([c["subtopic"] for c in chunks])
     for c in chunks:
         print("\n---")
