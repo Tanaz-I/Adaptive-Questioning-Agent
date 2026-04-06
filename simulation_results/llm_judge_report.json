@@ -1,0 +1,75 @@
+{
+  "question_quality": {
+    "overall_avg": 4.725,
+    "clarity": 4.8,
+    "relevance": 5.0,
+    "difficulty_fit": 4.1,
+    "type_fit": 5.0,
+    "by_difficulty": {
+      "advanced": 4.75,
+      "basic": 4.75,
+      "intermediate": 4.625
+    },
+    "by_question_type": {
+      "evaluative": 4.75,
+      "factual": 4.7,
+      "inferential": 4.75
+    }
+  },
+  "answer_score_audit": {
+    "avg_judge_score": 0.667,
+    "avg_system_score": 0.86,
+    "avg_score_gap": -0.193,
+    "avg_agreement": 0.792,
+    "correlation": 0.56,
+    "system_overscored_pct": 55.6,
+    "system_underscored_pct": 0.0,
+    "by_student": {
+      "strong": {
+        "avg_judge": 0.8,
+        "avg_system": 0.954,
+        "avg_gap": -0.154,
+        "correlation": -0.242
+      },
+      "weak": {
+        "avg_judge": 0.5,
+        "avg_system": 0.742,
+        "avg_gap": -0.242,
+        "correlation": NaN
+      }
+    }
+  },
+  "multihop_depth": {
+    "avg_depth_score": 4.333,
+    "pct_genuinely_inferential": 50.0,
+    "pct_genuinely_evaluative": 100.0,
+    "by_question_type": {
+      "evaluative": 5.0,
+      "inferential": 4.0
+    }
+  },
+  "rl_adaptation": {
+    "rl_difficulty_progression": 4,
+    "rl_topic_coverage": 4,
+    "rl_weak_student_support": 4,
+    "rl_strong_student_challenge": 5,
+    "rl_overall_adaptation": 4,
+    "rl_summary": "The RL agent demonstrates good adaptation to the two student types, with a focus on challenging the strong student and supporting the weak student. However, it could improve by covering more topics and revisiting previously struggled topics."
+  },
+  "student_comparison": {
+    "strong": {
+      "total_questions": 5,
+      "avg_system_score": 0.954,
+      "topics_mastered": 0,
+      "pct_advanced_diff": 40.0,
+      "pct_evaluative": 20.0
+    },
+    "weak": {
+      "total_questions": 5,
+      "avg_system_score": 0.751,
+      "topics_mastered": 0,
+      "pct_advanced_diff": 20.0,
+      "pct_evaluative": 20.0
+    }
+  }
+}
