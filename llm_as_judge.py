@@ -579,7 +579,7 @@ def print_report(report: dict):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sample",  type=int, default=100,
+    parser.add_argument("--sample",  type=int, default=None,
                         help="Sample N rows per student type (default: all)")
     parser.add_argument("--student", type=str, default=None,
                         choices=["strong", "weak"],
