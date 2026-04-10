@@ -4,12 +4,12 @@ from collections import defaultdict
 from knowledge_state import KnowledgeState, difficulty_level, question_types
 from MDP import MDP
 from Simulator import Simulator
-from PPOAgent import PPOAgent
-from REINFORCEAgent import AdaptiveAgent
+from PPOAgent1 import PPOAgent
+from REINFORCE1 import AdaptiveAgent
 from rule_based_agent import RuleBasedAgent
 
 
-
+"""
 def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student_nos=0):
 
     score_progression      = []
@@ -55,7 +55,75 @@ def reset_rl_agent(agent, topics):
 
     if hasattr(agent, 'reset_hidden'):
         agent.reset_hidden()
+""" 
 
+def run_agent_session(agent, simulator, topics, n_questions, is_rl=True, student_nos=0):
+    score_progression      = []
+    mastery_steps          = {t: -1 for t in topics}
+    per_topic_qtype_scores = defaultdict(lambda: defaultdict(list))
+
+    for step in range(n_questions):
+        if is_rl:
+            state_vector = agent.ks.get_state_vector()
+            action_idx   = agent.select_action_online(state_vector)  # [CHANGED]
+            topic, diff, qtype = agent.mdp.decode(action_idx)
+        else:
+            topic, diff, qtype = agent.select_action()
+
+        score = simulator.get_score(topic, diff, qtype)
+
+        if is_rl:
+            agent.record_student_response(topic, score, diff, qtype)  # [CHANGED]
+        else:
+            agent.update(topic, score, diff, qtype)
+
+        score_progression.append(score)
+        per_topic_qtype_scores[topic][qtype].append(score)
+
+        if mastery_steps[topic] == -1 and agent.ks.is_mastered(topic):
+            mastery_steps[topic] = step + 1
+
+    if is_rl:
+        agent.end_session()  # [CHANGED]
+
+    topics_mastered = sum(1 for v in mastery_steps.values() if v != -1)
+    return score_progression, topics_mastered, mastery_steps, per_topic_qtype_scores
+
+
+def reset_rl_agent(agent, topics):
+    for topic in topics:
+        agent.ks.topic_score[topic]    = 0.0
+        agent.ks.attempts[topic]       = 0
+        agent.ks.recent_scores[topic].clear()
+        agent.ks.combo_scores[topic]   = defaultdict(list)
+        agent.ks.prev_qtype[topic]     = (None, None)
+        agent.ks.current_level[topic]  = {
+            'diff_idx'        : 0,
+            'qtype_idx'       : 0,
+            'earned_diff_idx' : 0,
+            'earned_qtype_idx': 0,
+        }
+    agent.ks.prev_topic = None
+
+    # PPO online state
+    if hasattr(agent, 'online_hidden'):
+        agent.online_hidden = None
+    if hasattr(agent, 'session_step'):
+        agent.session_step  = 0
+    if hasattr(agent, 'online_buf'):
+        agent.online_buf    = defaultdict(list)
+
+    # REINFORCE online state
+    if hasattr(agent, 'online_log_probs'):
+        agent.online_log_probs = []
+    if hasattr(agent, 'online_rewards'):
+        agent.online_rewards   = []
+    if hasattr(agent, 'online_entropies'):
+        agent.online_entropies = []
+
+    # LSTM hidden reset (works for both PPO and REINFORCE)
+    if hasattr(agent, 'reset_hidden'):
+        agent.reset_hidden()
 
 def print_per_topic_report(topics, topics_difficulty, agent_labels,
                             per_topic_all_list, mastered_per_topic_list, n_students):
