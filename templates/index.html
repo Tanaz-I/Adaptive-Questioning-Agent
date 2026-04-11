@@ -32,7 +32,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 28px 20px 60px;
+    padding: 88px 20px 60px;
     overflow-x: hidden;
     }
 
@@ -55,10 +55,10 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 20px;
-      padding: 28px 20px 60px;
+      padding: 24px 20px 30px;
       width: 100%;
       max-width: 520px;
-      min-height: 420px;
+  
       box-shadow: 0 32px 80px rgba(0,0,0,0.55);
       animation: fadeUp 0.5s ease both;
     }
@@ -287,7 +287,7 @@
       margin-bottom: 20px;
     }
     .meta-pill {
-      font-size: 0.68rem;
+      font-size: 0.85rem;
       font-weight: 700;
       letter-spacing: 0.5px;
       text-transform: uppercase;
@@ -465,7 +465,7 @@
   </div>
 
   <h1>Upload Study Material</h1>
-  <p class="sub">Drop one or more documents — the RL agent will build a personalised quiz session from them.</p>
+  <p class="sub">Provide learning resources to generate a tailored question session.</p>
 
   <div class="drop-zone" id="dropZone">
     <input type="file" id="file" multiple accept=".pdf,.txt,.docx,.png,.jpg,.jpeg"/>
@@ -482,7 +482,7 @@
         </svg>
       </div>
       <p class="drop-title">Drag &amp; drop files here</p>
-      <p class="drop-hint">or click to browse &nbsp;·&nbsp; PDF, TXT, DOCX, Images</p>
+      <p class="drop-hint">or click to browse &nbsp;·&nbsp; PPTX, PDF, TXT, DOCX, Images</p>
     </div>
   </div>
 
@@ -517,14 +517,7 @@
 
   <div class="loader-ring"></div>
   <p class="loader-title">Preparing session…</p>
-  <p class="loader-sub">Training RL agent &amp; building question bank from your documents</p>
-
-  <div class="loader-steps" id="loaderSteps">
-    <div class="step active" id="step1">📚 Building knowledge base</div>
-    <div class="step"        id="step2">🧠 Extracting topics</div>
-    <div class="step"        id="step3">🔗 Mapping prerequisites</div>
-    <div class="step"        id="step4">🎯 Initialising RL agent</div>
-  </div>
+  <p class="loader-sub">Preparing your personalized learning experience. This may take few minutes...</p>
 
 </div>
 
@@ -547,13 +540,9 @@
   </div>
 
   <div class="meta-bar" id="metaBar">
-    <span class="meta-pill"           id="metaTopic">—</span>
-    <span class="meta-pill meta-diff" id="metaDiff">—</span>
-    <span class="meta-pill meta-type" id="metaType">—</span>
-    <span class="q-counter"           id="qCounter">Q 1</span>
+    <span class="meta-pill" id="qCounter">QUESTION  1</span>
   </div>
 
-  <p class="question-label">Question</p>
   <p id="question" class="question-text">Loading…</p>
 
   <textarea id="answer" placeholder="Write your answer here…" rows="5"></textarea>

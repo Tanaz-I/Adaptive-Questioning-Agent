@@ -69,7 +69,7 @@ function check(stepTimer) {
 // ── RENDER QUESTION ────────────────────────
 function renderQuestion(question, topic, diff, qtype) {
     document.getElementById("question").innerText = question || "Loading…";
-    document.getElementById("qCounter").innerText = "Q " + questionCount;
+    document.getElementById("qCounter").innerText = "QUESTION  " + questionCount;
 
     // Update meta pills if provided
     if (topic !== null) {

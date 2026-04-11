@@ -23,8 +23,9 @@ class PPOAgent:
                  entropy_coef=0.12,
                  value_coef=0.5,
                  rollout_episodes=8,
-                 tbptt_chunk=16,        
-                 use_lstm=False):
+                 tbptt_chunk=16,
+                 use_lstm=False,
+                 online_update_every=20):      # [ONLINE] how often to update mid-session
 
         self.gamma            = gamma
         self.lam              = lam
@@ -36,6 +37,7 @@ class PPOAgent:
         self.rollout_episodes = rollout_episodes
         self.tbptt_chunk      = tbptt_chunk
         self.use_lstm         = use_lstm
+        self.online_update_every = online_update_every  # [ONLINE]
 
         self.mdp = MDP(list(topics_difficulty.keys()),
                        difficulty_types=['basic', 'intermediate', 'advanced'],
@@ -57,7 +59,6 @@ class PPOAgent:
                                         prerequisites=prerequisites, window_size=10)
 
         if use_lstm:
-            # Separate lrs: lower for critic to prevent value head explosion
             self.optimizer = torch.optim.AdamW([
                 {'params': self.ac_network.lstm.parameters(),        'lr': 1e-4},
                 {'params': self.ac_network.actor_fc.parameters(),    'lr': 1e-4},
@@ -68,10 +69,14 @@ class PPOAgent:
         else:
             self.optimizer = torch.optim.AdamW(self.ac_network.parameters(), lr=1e-4)
 
-        self.pretrain(n_episodes=n_episodes, n_questions=n_questions)
-        self.reset_rl_agent(list(topics_difficulty.keys()))
+        # [ONLINE] online session buffer and persistent hidden state
+        self.online_buf    = defaultdict(list)
+        self.online_hidden = None
+        self.session_step  = 0   # tracks questions answered this session
 
-   
+        self.pretrain(n_episodes=n_episodes, n_questions=n_questions)
+
+
     def _build_action_mask(self):
         mask = torch.full((self.mdp.n_actions,), float('-inf'))
         for idx in range(self.mdp.n_actions):
@@ -82,9 +87,9 @@ class PPOAgent:
                 mask[idx] = 0.0
         return mask
 
-   
+
     def select_action(self, state_vector, hidden=None, training=False):
-        state = torch.FloatTensor(state_vector).unsqueeze(0)  # (1, input_size)
+        state = torch.FloatTensor(state_vector).unsqueeze(0)
 
         if self.use_lstm:
             logits, value, new_hidden = self.ac_network(state, hidden)
@@ -94,16 +99,116 @@ class PPOAgent:
             logits, value = self.ac_network(state.squeeze(0))
             new_hidden = None
 
-        mask   = self._build_action_mask()
-        logits = logits + mask
+        mask        = self._build_action_mask()
+        logits      = logits + mask
         temperature = 1.0 if training else 0.7
-        probs  = F.softmax(logits / temperature, dim=-1)
-        dist   = torch.distributions.Categorical(probs)
-        action = dist.sample()
+        probs       = F.softmax(logits / temperature, dim=-1)
+        dist        = torch.distributions.Categorical(probs)
+        action      = dist.sample()
 
         return action.item(), dist.log_prob(action), dist.entropy(), value, mask, new_hidden
 
-    
+
+    # [ONLINE] called by Flask route to get next question for real student
+    def select_action_online(self, state_vector):
+        action_idx, log_prob, entropy, value, mask, self.online_hidden = self.select_action(
+            state_vector, hidden=self.online_hidden, training=True
+        )
+
+        # detach hidden so gradients don't bleed across question boundaries
+        if self.online_hidden is not None:
+            self.online_hidden = (self.online_hidden[0].detach(),
+                                  self.online_hidden[1].detach())
+
+        # store everything except reward — reward comes after student answers
+        self.online_buf['states'].append(state_vector)
+        self.online_buf['actions'].append(action_idx)
+        self.online_buf['log_probs'].append(log_prob.item())
+        self.online_buf['values'].append(value.item())
+        self.online_buf['entropies'].append(entropy.item())
+        self.online_buf['masks'].append(mask)
+        self.online_buf['dones'].append(0.0)
+        self.online_buf['episode_start'].append(
+            1.0 if self.session_step == 0 else 0.0
+        )
+
+        return action_idx
+
+
+    # [ONLINE] called after student submits answer
+    def record_student_response(self, topic, score, difficulty, question_type):
+        # drop unpaired state if somehow called without a prior select_action_online
+        if len(self.online_buf['states']) == len(self.online_buf['rewards']):
+            return None
+
+        reward = self.update(topic, score, difficulty, question_type)
+        self.online_buf['rewards'].append(reward)
+        self.session_step += 1
+
+        # [ONLINE] trigger mid-session PPO update every N answered questions
+        if self.session_step % self.online_update_every == 0:
+            self._online_ppo_update()
+
+        return reward
+
+
+    # [ONLINE] PPO update on the current online buffer chunk
+    def _online_ppo_update(self):
+        buf = self.online_buf
+
+        # need at least 2 transitions to compute GAE
+        if len(buf['rewards']) < 2:
+            return
+
+        # treat the last collected step as terminal for GAE computation
+        buf['dones'][-1] = 1.0
+
+        adv, ret = self._compute_gae(buf['rewards'], buf['values'], buf['dones'])
+        buf['advantages'] = adv.tolist()
+        buf['returns']    = ret.tolist()
+
+        # use fewer epochs for online updates to avoid overfitting small buffer
+        """saved_epochs      = self.ppo_epochs
+        self.ppo_epochs   = 3                  # [ONLINE] lighter update
+        self.ppo_update(buf)
+        self.ppo_epochs   = saved_epochs"""
+
+        saved_epochs    = self.ppo_epochs
+        saved_clip      = self.clip_eps        # [ADD]
+        self.ppo_epochs = 3
+        self.clip_eps   = 0.1                  # [ADD] conservative for small buffer
+        self.ppo_update(buf)
+        self.ppo_epochs = saved_epochs
+        self.clip_eps   = saved_clip
+        # clear buffer — next chunk starts fresh
+        self._reset_online_buf()
+
+
+    # [ONLINE] call when student ends the session
+    def end_session(self):
+        buf = self.online_buf
+
+        # drop any unpaired state (student quit mid-question without answering)
+        if len(self.online_buf['states']) > len(self.online_buf['rewards']):
+            for key in ['states', 'actions', 'log_probs', 'values',
+                        'entropies', 'masks', 'dones', 'episode_start']:
+                self.online_buf[key] = self.online_buf[key][:len(self.online_buf['rewards'])]
+
+        # run final update on any remaining transitions not yet updated
+        if len(buf['rewards']) >= 2:
+            self._online_ppo_update()
+
+        # reset session state
+        self.online_hidden = None
+        self.session_step  = 0
+        self._reset_online_buf()
+
+
+    # [ONLINE] reset online buffer between chunks / sessions
+    def _reset_online_buf(self):
+        self.online_buf = defaultdict(list)
+
+
     def _compute_gae(self, rewards, values, dones):
         advantages = []
         gae        = 0.0
@@ -123,7 +228,7 @@ class PPOAgent:
         returns    = advantages + torch.FloatTensor(values)
         return advantages, returns
 
-    
+
     def run_episode(self, n_questions=25):
         self.simulator.reset_mastery_scores()
         for topic in self.ks.topics:
@@ -146,7 +251,6 @@ class PPOAgent:
             action_idx, log_prob, entropy, value, mask, hidden = self.select_action(
                 state_vector, hidden=hidden, training=True)
 
-            
             if hidden is not None:
                 hidden = (hidden[0].detach(), hidden[1].detach())
 
@@ -171,11 +275,11 @@ class PPOAgent:
             buf['entropies'].append(entropy.item())
             buf['dones'].append(0.0)
             buf['masks'].append(mask)
-           
             buf['episode_start'].append(1.0 if step == 0 else 0.0)
 
         buf['dones'][-1] = 1.0
         return buf
+
 
     def ppo_update(self, buf):
         states         = torch.FloatTensor(np.array(buf['states']))
@@ -184,7 +288,7 @@ class PPOAgent:
         masks          = torch.stack(buf['masks'])
         advantages     = torch.FloatTensor(buf['advantages'])
         returns        = torch.FloatTensor(buf['returns'])
-        episode_starts = buf['episode_start']   # plain list of floats
+        episode_starts = buf['episode_start']
 
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
@@ -207,14 +311,14 @@ class PPOAgent:
                         if episode_starts[tc] == 1.0:
                             chunk_end = tc
                             break
-                    
-                    s_chunk = states[t:chunk_end].unsqueeze(0)        
-                    m_chunk = masks[t:chunk_end]                      
+
+                    s_chunk = states[t:chunk_end].unsqueeze(0)
+                    m_chunk = masks[t:chunk_end]
 
                     logits_chunk, values_chunk, new_hidden = self.ac_network(s_chunk, hidden)
-                    logits_chunk = logits_chunk.squeeze(0)             
+                    logits_chunk = logits_chunk.squeeze(0)
                     if values_chunk.dim() > 1:
-                        values_chunk = values_chunk.squeeze(0)      
+                        values_chunk = values_chunk.squeeze(0)
 
                     logits_chunk = logits_chunk + m_chunk
 
@@ -237,12 +341,11 @@ class PPOAgent:
                             - self.entropy_coef * entropy)
 
                     self.optimizer.zero_grad()
-                    loss.backward()                                    
+                    loss.backward()
                     nn.utils.clip_grad_norm_(self.ac_network.parameters(), max_norm=0.1)
                     self.optimizer.step()
                     total_loss_val += loss.item()
 
-                    # Detach hidden before next chunk (Truncated BPTT boundary)
                     hidden = (new_hidden[0].detach(), new_hidden[1].detach())
                     t = chunk_end
 
@@ -281,7 +384,7 @@ class PPOAgent:
 
         return total_loss_val / (self.ppo_epochs * max(1, n // self.mini_batch))
 
-  
+
     def pretrain(self, n_episodes=2000, n_questions=500):
         total_losses = []
 
@@ -326,11 +429,11 @@ class PPOAgent:
         plt.title(f'Smoothed PPO Training Loss ({"LSTM" if self.use_lstm else "MLP"})')
         plt.xlabel('Episode')
         plt.ylabel('Loss')
-        plt.savefig(f"TrainingLoss_PPO_({'LSTM' if self.use_lstm else 'MLP'}).png")
+        #plt.savefig(f"Results/TrainingLoss_PPO_({'LSTM' if self.use_lstm else 'MLP'}).png")
 
         return total_losses
 
-    
+
     def update(self, topic, score, difficulty, question_type):
         prev_score       = self.ks.topic_score[topic]
         old_earned_diff  = self.ks.current_level[topic]['earned_diff_idx']
@@ -345,12 +448,13 @@ class PPOAgent:
             self.ks.topic_score[topic]   = 0.0
             self.ks.attempts[topic]      = 0
             self.ks.recent_scores[topic].clear()
-            self.ks.combo_scores[topic] = defaultdict(list)
+            self.ks.combo_scores[topic]  = defaultdict(list)
             self.ks.prev_qtype[topic]    = (None, None)
             self.ks.current_level[topic] = {
-                'diff_idx'        : 0,
-                'qtype_idx'       : 0,
-                'earned_diff_idx' : 0,
-                'earned_qtype_idx': 0
+                'diff_idx': 0, 'qtype_idx': 0,
+                'earned_diff_idx': 0, 'earned_qtype_idx': 0
             }
-        self.ks.prev_topic = None
+        self.ks.prev_topic   = None
+        self.online_hidden   = None
+        self.session_step    = 0
+        self.online_buf      = defaultdict(list)
