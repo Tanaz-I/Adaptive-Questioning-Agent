@@ -122,31 +122,6 @@ def convert_legacy_files(docs_dir: str):
     if converted:
         print(f"  Converted {converted} legacy file(s).\n")
 
-
-def ocr_image(image_bytes):
-    try:
-        import io
-        img = Image.open(io.BytesIO(image_bytes)).convert("L")
-        img = img.point(lambda x: 0 if x < 140 else 255, '1')
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
-
-        text = pytesseract.image_to_string(img, config='--psm 6')
-
-        def clean_ocr_text(text):
-            lines = text.split("\n")
-
-            cleaned = [
-                l for l in lines
-                if not l.lower().startswith("here is")
-                and not l.lower().startswith("i fixed")
-            ]
-
-            return "\n".join(cleaned)
-        text = clean_ocr_text(text)
-        return text.strip()
-    except Exception as e:
-        print("[OCR ERROR]:", e)
-        return ""
     
 def is_valid_ocr(text):
     if len(text.split()) < 5:
@@ -880,14 +855,23 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
             images = section.get("images", [])
 
             for img_bytes in images:
+                image_type = classify_image_type(img_bytes)
+
                 processed_text = ""
+
+                # Reconstruct code using LLM only if it's a code image
+                if image_type == "code":
+                    code_text = extract_code_from_image(img_bytes)
+                    processed_text = reconstruct_code_llm(code_text)
+
                 image_type = "image"
 
                 # --- Step 1: Try table extraction via Img2Table ---
-                table_text, is_table = extract_table_from_image(img_bytes)
-                if is_table and table_text:
-                    processed_text = table_text
-                    image_type = "table"
+                if not processed_text:
+                    table_text, is_table = extract_table_from_image(img_bytes)
+                    if is_table and table_text:
+                        processed_text = table_text
+                        image_type = "table"
 
                 # --- Step 2: Try chart/graph insight extraction via deplot ---
                 if not processed_text:
@@ -904,10 +888,6 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
 
                 if not is_valid_ocr(processed_text):
                     continue
-
-                # Reconstruct code using LLM only if it's a code image
-                if detect_code(processed_text) and len(processed_text.split()) > 8:
-                    processed_text = reconstruct_code_llm(processed_text)
 
                 uid = hashlib.md5(
                     f"{path}::img::{section['page_number']}::{processed_text}".encode()
