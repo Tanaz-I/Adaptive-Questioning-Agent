@@ -67,19 +67,30 @@ function submitAnswer() {
         return r.json();
     })
     .then(data => {
-
-        console.log("Submit response:", data); // DEBUG
-
         let resultDiv = document.getElementById("result");
-
         resultDiv.classList.remove("hidden");
+
+        const errorColors = {
+            none:       "#34d399",
+            careless:   "#fbbf24",
+            partial:    "#fb923c",
+            conceptual: "#f87171",
+            off_topic:  "#f87171",
+            code_syntax:"#a78bfa"
+        };
+        const color     = errorColors[data.error_type] || "#888888";
+        const errorLabel = data.error_type ? data.error_type.replace("_", " ") : "ok";
 
         resultDiv.innerHTML = `
             <div style="margin-top:15px; padding:15px; background:#f5f7ff; border-radius:10px;">
-                <b>Score:</b> ${data.score}<br>
+                <b>Score:</b> ${data.score}
+                <span style="color:${color}; font-size:0.85em; margin-left:8px;">[${errorLabel}]</span><br>
                 <b>Reward:</b> ${data.reward}<br><br>
-                <b>Reference Answer:</b><br>
-                ${data.reference}
+                <div style="background:#fffbeb; padding:10px; border-radius:8px;
+                            margin:8px 0; border-left:3px solid ${color};">
+                    <b>Feedback:</b> ${data.feedback || "Good effort!"}
+                </div>
+                <b>Reference Answer:</b><br>${data.reference}
             </div>
         `;
     })
