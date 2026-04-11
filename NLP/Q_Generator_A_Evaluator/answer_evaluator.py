@@ -161,7 +161,7 @@ def length_penalty(student, reference):
     elif ratio >= 0.15:  return 0.70
     else:                return 0.55   # very short answer
 
-def recalibrate(score, low=0.30, high=0.85):
+def recalibrate(score, low=0.0, high=1.0):
     """
     Stretch scores from observed range [low, high] to [0, 1].
     Measure your actual score distribution first:
@@ -173,20 +173,91 @@ def recalibrate(score, low=0.30, high=0.85):
     return float(max(0.0, min(1.0, stretched)))
 
 # ─────────────────────────────────────────────
+# Error Taxonomy
+# ─────────────────────────────────────────────
+
+def _detect_code_in_answer(text: str) -> bool:
+    CODE_SIGNALS = ['{', '}', ';', '::', '->', 'def ', 'class ', '#include', 'return ', 'void ']
+    return sum(1 for s in CODE_SIGNALS if s in text) >= 2
+
+
+def classify_error(student: str, reference: str, score: float,
+                   semantic: float, keyword: float, nli: float) -> str:
+    """
+    Classify the student's error type using score thresholds and text signals.
+    Returns one of: "none" | "off_topic" | "conceptual" | "partial" | "code_syntax" | "careless"
+    """
+    if score >= 0.75:
+        return "none"
+
+    s_words = set(preprocess(student).split()) - STOPWORDS
+    r_words = set(preprocess(reference).split()) - STOPWORDS
+    overlap = len(s_words & r_words) / max(len(r_words), 1)
+
+    if semantic < 0.25 and overlap < 0.1:
+        return "off_topic"
+
+    if nli < 0.3 and overlap > 0.2:
+        # Student uses right words but contradicts the reference
+        return "conceptual"
+
+    if _detect_code_in_answer(student) and score < 0.5:
+        return "code_syntax"
+
+    if keyword < 0.3 and semantic > 0.4:
+        return "partial"   # understands but uses wrong terminology
+
+    if score < 0.5:
+        return "partial"
+
+    return "careless"
+
+
+def generate_feedback(student: str, reference: str,
+                      error_type: str, question: str, score: float) -> str:
+    """
+    Generate concise textual feedback. Pure heuristic — no LLM call.
+    """
+    if score >= 0.85:
+        return "Excellent — all key points covered."
+
+    ref_words   = [w for w in preprocess(reference).split()
+                   if w not in STOPWORDS and len(w) > 3]
+    stu_words   = set(preprocess(student).split())
+    missing     = [w for w in dict.fromkeys(ref_words) if w not in stu_words][:5]
+    missing_str = ", ".join(missing) if missing else "key concepts"
+
+    templates = {
+        "off_topic":   f"Your answer doesn't address the question. Re-read: {question[:80]}",
+        "conceptual":  f"Core concept misunderstood. Review: {missing_str}.",
+        "partial":     f"Partially correct. Missing details on: {missing_str}.",
+        "code_syntax": "Code logic may be right but contains syntax errors. Review carefully.",
+        "careless":    f"Almost there — improve precision on: {missing_str}.",
+    }
+    return templates.get(error_type, f"Review the concept — missing: {missing_str}.")
+
+# ─────────────────────────────────────────────
 # Final Evaluation (GENERIC + ADAPTIVE)
 # ─────────────────────────────────────────────
 
 def evaluate_answer(student, reference, question_type, question):
-    def is_question_copy(student, question):
-        return student.strip().lower() == question.strip().lower()
-    if is_question_copy(student, question):
+    def is_question_rewrite(student: str, question: str) -> bool:
+        s = set(student.lower().split())
+        q = set(question.lower().split())
+
+        overlap = len(s & q) / max(len(q), 1)
+
+        return overlap > 0.8
+    if is_question_rewrite(student, question):
         return {
             "semantic_score": 0.0,
             "keyword_score": 0.0,
             "nli_score": 0.0,
             "completeness_score": 0.0,
             "length_penalty": 0.0,
-            "final_score": 0.0
+            "final_score": 0.0,
+            "error_type": "conceptual",    
+            "feedback": "Seems like question was paraphrased", 
         }
     # Tokenize reference into sentences
     ref_sentences = [s.strip() for s in reference.split(".")
@@ -219,6 +290,9 @@ def evaluate_answer(student, reference, question_type, question):
     raw   = W[0]*s + W[1]*k + W[2]*n + W[3]*c
     final = recalibrate(raw * lp)
 
+    error_type = classify_error(student, reference, round(final, 3), s, k, n)
+    feedback   = generate_feedback(student, reference, error_type, question, round(final, 3))
+
     return {
         "semantic_score":     round(s,  3),
         "keyword_score":      round(k,  3),
@@ -226,6 +300,8 @@ def evaluate_answer(student, reference, question_type, question):
         "completeness_score": round(c,  3),
         "length_penalty":     round(lp, 3),
         "final_score":        round(final, 3),
+        "error_type":         error_type,    
+        "feedback":           feedback, 
     }
 
 

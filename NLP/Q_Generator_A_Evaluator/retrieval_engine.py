@@ -577,40 +577,40 @@ if __name__ == "__main__":
 
     print("\n========== TEST: PARENT_ID GROUPING ==========\n")
 
-target_chunk = chunks[0]
+    target_chunk = chunks[0]
 
-print("TARGET CHUNK:")
-print("Text:", target_chunk["text"][:200])
-print("Page:", target_chunk.get("page_number"))
-print("Section:", target_chunk.get("section"))
+    print("TARGET CHUNK:")
+    print("Text:", target_chunk["text"][:200])
+    print("Page:", target_chunk.get("page_number"))
+    print("Section:", target_chunk.get("section"))
 
-# If meta exists (safe handling)
-if "meta" in target_chunk:
-    print("Parent ID:", target_chunk["meta"].get("parent_id"))
-else:
-    print("Parent ID:", target_chunk.get("parent_id"))
+    # If meta exists (safe handling)
+    if "meta" in target_chunk:
+        print("Parent ID:", target_chunk["meta"].get("parent_id"))
+    else:
+        print("Parent ID:", target_chunk.get("parent_id"))
 
-print("\n---- NEIGHBORS ----\n")
+    print("\n---- NEIGHBORS ----\n")
 
-neighbors = get_neighbor_chunks(chunk=target_chunk)
+    neighbors = get_neighbor_chunks(chunk=target_chunk)
 
-parent_ids = set()
-pages = set()
+    parent_ids = set()
+    pages = set()
 
-for i, n in enumerate(neighbors, 1):
+    for i, n in enumerate(neighbors, 1):
 
-    meta = n["meta"]
+        meta = n["meta"]
 
-    print(f"\nNeighbor {i}")
-    print("Text:", n["text"][:150])
-    print("Page:", meta.get("page_number"))
-    print("Section:", meta.get("section"))
-    print("Parent ID:", meta.get("parent_id"))
+        print(f"\nNeighbor {i}")
+        print("Text:", n["text"][:150])
+        print("Page:", meta.get("page_number"))
+        print("Section:", meta.get("section"))
+        print("Parent ID:", meta.get("parent_id"))
 
-    parent_ids.add(meta.get("parent_id"))
-    pages.add(meta.get("page_number"))
+        parent_ids.add(meta.get("parent_id"))
+        pages.add(meta.get("page_number"))
 
-print("\n========== SUMMARY ==========")
-print("Unique parent_ids:", parent_ids)
-print("Unique pages:", pages)
-print("Total neighbors:", len(neighbors))
+    print("\n========== SUMMARY ==========")
+    print("Unique parent_ids:", parent_ids)
+    print("Unique pages:", pages)
+    print("Total neighbors:", len(neighbors))

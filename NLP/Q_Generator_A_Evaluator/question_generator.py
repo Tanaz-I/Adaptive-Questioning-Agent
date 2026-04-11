@@ -30,6 +30,22 @@ EVALUATIVE_FRAMES = [
     "If you had to choose between {A} and {B} for a large codebase, which would you pick and why?",
 ]
 
+def override_code_flag(text, meta):
+    """
+    Fix false positives in code detection
+    """
+    if not meta.get("contains_code"):
+        return meta
+
+    # Strong code indicators
+    code_signals = ['{', '}', ';', '#include', 'class ', 'return', '::']
+    score = sum(1 for s in code_signals if s in text)
+
+    # If weak signal → downgrade
+    if score < 3:
+        meta["contains_code"] = False
+
+    return meta
 
 # ─────────────────────────────────────────────
 # LLM Call
@@ -502,63 +518,63 @@ def build_grounding_rule(meta):
 # ─────────────────────────────────────────────
 # 1. Factual Question
 # ─────────────────────────────────────────────
-def generate_chart_question(chunk_text: str, topic: str, difficulty: str, asked_questions: list) -> dict:
-    """
-    Generates a data-interpretation question from an extracted chart description.
-    """
-    avoid = build_avoid_str(asked_questions)
+# def generate_chart_question(chunk_text: str, topic: str, difficulty: str, asked_questions: list) -> dict:
+#     """
+#     Generates a data-interpretation question from an extracted chart description.
+#     """
+#     avoid = build_avoid_str(asked_questions)
 
-    prompt = f"""You are an expert teacher creating a data interpretation question.
+#     prompt = f"""You are an expert teacher creating a data interpretation question.
 
-Topic: {topic}
-Difficulty: {difficulty}
+# Topic: {topic}
+# Difficulty: {difficulty}
 
-Extracted chart data:
-{chunk_text}
+# Extracted chart data:
+# {chunk_text}
 
-Write ONE question that requires the student to interpret the chart data.
-The question should:
-- Reference specific values, labels, or trends visible in the chart description
-- NOT be answerable without reading the chart data
-- Ask for interpretation, comparison, or trend analysis (not pure recall)
+# Write ONE question that requires the student to interpret the chart data.
+# The question should:
+# - Reference specific values, labels, or trends visible in the chart description
+# - NOT be answerable without reading the chart data
+# - Ask for interpretation, comparison, or trend analysis (not pure recall)
 
-Then write a reference answer using ONLY the information in the chart description above.
+# Then write a reference answer using ONLY the information in the chart description above.
 
-{avoid}
+# {avoid}
 
-Return ONLY valid JSON:
-{{"question": "...", "reference_answer": "..."}}"""
+# Return ONLY valid JSON:
+# {{"question": "...", "reference_answer": "..."}}"""
 
-    return parse_json(call_llm(prompt, temperature=0.2))
+#     return parse_json(call_llm(prompt, temperature=0.2))
 
 
-def generate_table_question(chunk_text: str, topic: str, difficulty: str, asked_questions: list) -> dict:
-    """
-    Generates a table-reading question from an extracted table (markdown format).
-    """
-    avoid = build_avoid_str(asked_questions)
+# def generate_table_question(chunk_text: str, topic: str, difficulty: str, asked_questions: list) -> dict:
+#     """
+#     Generates a table-reading question from an extracted table (markdown format).
+#     """
+#     avoid = build_avoid_str(asked_questions)
 
-    prompt = f"""You are an expert teacher creating a question based on a data table.
+#     prompt = f"""You are an expert teacher creating a question based on a data table.
 
-Topic: {topic}
-Difficulty: {difficulty}
+# Topic: {topic}
+# Difficulty: {difficulty}
 
-Extracted table:
-{chunk_text}
+# Extracted table:
+# {chunk_text}
 
-Write ONE question that:
-- Asks the student to read, compare, or calculate from the table values
-- Cannot be answered without consulting the table
-- Is appropriate for difficulty level: {difficulty}
+# Write ONE question that:
+# - Asks the student to read, compare, or calculate from the table values
+# - Cannot be answered without consulting the table
+# - Is appropriate for difficulty level: {difficulty}
 
-Write a reference answer using the table data above.
+# Write a reference answer using the table data above.
 
-{avoid}
+# {avoid}
 
-Return ONLY valid JSON:
-{{"question": "...", "reference_answer": "..."}}"""
+# Return ONLY valid JSON:
+# {{"question": "...", "reference_answer": "..."}}"""
 
-    return parse_json(call_llm(prompt, temperature=0.2))
+#     return parse_json(call_llm(prompt, temperature=0.2))
 
 def generate_factual_v2(chunk, meta, topic, difficulty, asked_questions):
     avoid = build_avoid_str(asked_questions)
@@ -1014,22 +1030,28 @@ def generate_question(topic, difficulty, question_type,
     text3 = build_context(chunk3, n3)
     meta1, meta2, meta3 = chunk1, chunk2, chunk3
 
-    def get_chunk_type(chunk):
-        return chunk.get("chunk_type") or chunk.get("meta", {}).get("chunk_type", "text")
+    meta1 = override_code_flag(text1, meta1)
+    meta2 = override_code_flag(text2, meta2)
+    meta3 = override_code_flag(text3, meta3)
 
-    top_type = get_chunk_type(chunk1)
+    print(meta2.get("contains_code"))
 
-    if top_type == "chart" and question_type == "factual":
-        result = generate_chart_question(text1, topic, difficulty, asked_questions)
-        if validate(result):
-            result["question_type"] = "factual"
-            return result, new_keys
+    # def get_chunk_type(chunk):
+    #     return chunk.get("chunk_type") or chunk.get("meta", {}).get("chunk_type", "text")
 
-    if top_type == "table" and question_type == "factual":
-        result = generate_table_question(text1, topic, difficulty, asked_questions)
-        if validate(result):
-            result["question_type"] = "factual"
-            return result, new_keys
+    # top_type = get_chunk_type(chunk1)
+
+    # if top_type == "chart" and question_type == "factual":
+    #     result = generate_chart_question(text1, topic, difficulty, asked_questions)
+    #     if validate(result):
+    #         result["question_type"] = "factual"
+    #         return result, new_keys
+
+    # if top_type == "table" and question_type == "factual":
+    #     result = generate_table_question(text1, topic, difficulty, asked_questions)
+    #     if validate(result):
+    #         result["question_type"] = "factual"
+    #         return result, new_keys
 
     # ── Step 4: Factual — 1 LLM call ─────────────────────────────
     if question_type == "factual":
@@ -1102,7 +1124,7 @@ if __name__ == "__main__":
     q, _ = generate_question(
         topic="Pointers to Class Members",
         difficulty="medium",
-        question_type="evaluative",
+        question_type="inferential",
         question_count=0,
         asked_questions=[]
     )

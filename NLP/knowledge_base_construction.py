@@ -45,7 +45,7 @@ import nltk
 nltk.download("punkt")
 nltk.download("punkt_tab")
 from nltk.tokenize import sent_tokenize
-from image_processing import *
+from NLP.image_processing import *
 
 # Configuration
 
