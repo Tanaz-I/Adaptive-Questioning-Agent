@@ -1060,7 +1060,8 @@ def generate_question(topic, difficulty, question_type,
 
         if prob < 0.3 and question_type == "factual":
             # ── MCQ path ──────────────────────────────────────────────
-            result = generate_mcq_v2(text1, meta1, topic, difficulty, asked_questions)
+            result = None
+            # result = generate_mcq_v2(text1, meta1, topic, difficulty, asked_questions)
 
             if result is None:
                 # MCQ generation failed — fall back to open-ended factual

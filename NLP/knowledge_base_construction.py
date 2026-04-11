@@ -29,30 +29,40 @@ import subprocess
 from pathlib import Path
 from dataclasses import dataclass
 import json
+import base64
 import requests
 import pdfplumber
 from pptx import Presentation
 from docx import Document as DocxDocument
+
 from PIL import Image
-import numpy as np
-import cv2
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity
+
+from img2table.document import Image as Img2TableImage
+from img2table.ocr import TesseractOCR
+from transformers import Pix2StructProcessor, Pix2StructForConditionalGeneration
+processor = Pix2StructProcessor.from_pretrained("google/deplot")
+model = Pix2StructForConditionalGeneration.from_pretrained("google/deplot")
+
 import nltk
 nltk.download("punkt")
 nltk.download("punkt_tab")
 from nltk.tokenize import sent_tokenize
 from NLP.image_processing import *
 
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
 # Configuration
 
-DOCS_DIR        = "./contents"       # Root directory with all source files
-CHROMA_DB_DIR   = "./chroma_db"
-COLLECTION_NAME = "rag_kb"
-EMBED_MODEL     = "all-MiniLM-L6-v2"
+DOCS_DIR         = "./contents"       # Root directory with all source files
+CHROMA_DB_DIR    = "./chroma_db"
+COLLECTION_NAME  = "rag_kb"
+EMBED_MODEL      = "all-MiniLM-L6-v2"
+MULTIMODAL_MODEL = "llava"
 
 CHUNK_SIZE              = 500                 # Max characters per chunk
 CHUNK_OVERLAP           = 80                  # Overlap between chunks
@@ -79,6 +89,7 @@ class Chunk:
     chunk_index:  int           # Index within the page/section
     total_chunks: int           # Total chunks from this page/section
     is_image: bool
+    image_type:   str           # image, table, chart, or text
     parent_id:    str = ""          # NEW — MD5 of (file_path + page_number)
     chunk_type:   str = "text"      # NEW — "text" | "code" | "equation" | "image"
 
@@ -111,11 +122,164 @@ def convert_legacy_files(docs_dir: str):
     if converted:
         print(f"  Converted {converted} legacy file(s).\n")
 
+
+def ocr_image(image_bytes):
+    try:
+        import io
+        img = Image.open(io.BytesIO(image_bytes)).convert("L")
+        img = img.point(lambda x: 0 if x < 140 else 255, '1')
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+
+        text = pytesseract.image_to_string(img, config='--psm 6')
+
+        def clean_ocr_text(text):
+            lines = text.split("\n")
+
+            cleaned = [
+                l for l in lines
+                if not l.lower().startswith("here is")
+                and not l.lower().startswith("i fixed")
+            ]
+
+            return "\n".join(cleaned)
+        text = clean_ocr_text(text)
+        return text.strip()
+    except Exception as e:
+        print("[OCR ERROR]:", e)
+        return ""
+    
 def is_valid_ocr(text):
     if len(text.split()) < 5:
         return False
 
     return True
+
+
+def extract_table_from_image(image_bytes):
+    try:
+        import os
+        os.environ["PATH"] += r";C:\Program Files\Tesseract-OCR"
+        ocr = TesseractOCR()
+        doc = Img2TableImage(src=image_bytes)
+        tables = doc.extract_tables(ocr=ocr, implicit_rows=True, borderless_tables=True)
+        if not tables:
+            return "", False
+        rows = []
+        for table in tables:
+            df = table.df
+            for _, row in df.iterrows():
+                rows.append(" | ".join(str(c) for c in row if str(c).strip()))
+        result = "\n".join(rows)
+        return (result, True) if len(rows) >= 2 else ("", False)
+    except Exception as e:
+        print(f"[img2table ERROR]: {e}")
+        return "", False
+
+
+def extract_chart_data_deplot(image_bytes):
+    try:
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        inputs = processor(
+            images=image,
+            text="Generate underlying data table of the figure below:",
+            return_tensors="pt"
+        )
+        predictions = model.generate(**inputs, max_new_tokens=512)
+        result = processor.decode(predictions[0], skip_special_tokens=True)
+        return result.strip() if result.strip() else None
+    except Exception as e:
+        print(f"[Deplot ERROR]: {e}")
+        return None
+
+
+def extract_chart_insights_from_image(image_bytes):
+    """Use LLaVA to directly detect charts/graphs and extract insights — no OCR dependency."""
+    try:
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        prompt = """Analyze this image carefully.
+
+If this image contains a chart, graph, or data visualization (bar chart, line graph, pie chart, scatter plot, etc.):
+- Identify the chart type.
+- Describe the axes, labels, and legend if visible.
+- Summarize the key trend, comparison, or insight in 2-3 concise sentences.
+- Note any significant data points or outliers.
+- Return your analysis starting with: CHART_INSIGHT:
+
+If this image does NOT contain a chart or graph, reply with exactly: NO_CHART"""
+
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": MULTIMODAL_MODEL,
+                "prompt": prompt,
+                "images": [image_b64],
+                "stream": False,
+                "options": {"temperature": 0, "num_predict": 300}
+            },
+            timeout=120
+        )
+        result = response.json().get("response", "").strip()
+
+        if not result or "NO_CHART" in result.upper():
+            return None
+
+        if "CHART_INSIGHT:" in result:
+            return result.split("CHART_INSIGHT:", 1)[1].strip()
+
+        return result  # fallback: return whatever LLaVA gave
+
+    except Exception as e:
+        print(f"[LLaVA CHART ERROR]: {e}")
+        return None
+
+
+def detect_chart_image(text):
+    if not text:
+        return False
+
+    lower = text.lower()
+    keywords = [
+        "chart", "graph", "x-axis", "y-axis", "legend", "series", "plot",
+        "trend", "increase", "decrease", "percentage", "vs ", "axis",
+    ]
+    score = sum(1 for kw in keywords if kw in lower)
+    return score >= 2 and bool(re.search(r"\d+", lower))
+
+
+def summarize_chart_image(image_bytes, extracted_text=""):
+    if not image_bytes:
+        return None
+
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    prompt = f"""
+You are a data analyst. The user has provided a chart or graph image and the OCR text extracted from it.
+Use the image and the text to summarize the main insight, trend, or comparison in 2-3 concise sentences.
+If the chart information is unclear, explain what can be inferred and what is missing.
+
+OCR text:
+{extracted_text.strip()}
+
+Instructions:
+- Focus on the key trend or takeaway.
+- Mention the axes, series, or direction if visible.
+- Do not hallucinate details not present in the image or text.
+"""
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": MULTIMODAL_MODEL,
+                "prompt": prompt,
+                "image": image_b64,
+                "stream": False,
+                "options": {"temperature": 0, "max_output_tokens": 200}
+            },
+            timeout=120
+        )
+        return response.json().get("response", "").strip()
+    except Exception:
+        return None
+
 
 def detect_code(text):
 
@@ -541,6 +705,7 @@ def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: 
             page_number = section["page_number"],
             section     = section["section"],
             is_image    = False,
+            image_type  = "text",
             chunk_index = idx,
             total_chunks= total,
             parent_id   = parent_id,
@@ -613,6 +778,7 @@ def store_in_vector_db(chunks: list[Chunk]) -> chromadb.Collection:
                 "total_chunks": c.total_chunks,
 
                 "source": "image" if c.is_image == True else "text",
+                "image_type":   c.image_type,
 
                 "contains_code": contains_code,
                 "contains_example": contains_example,
@@ -714,32 +880,53 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
             images = section.get("images", [])
 
             for img_bytes in images:
-                extracted_text, img_chunk_type = extract_image_content(img_bytes)
+                processed_text = ""
+                image_type = "image"
 
-                if not extracted_text or not is_valid_ocr(extracted_text):
+                # --- Step 1: Try table extraction via Img2Table ---
+                table_text, is_table = extract_table_from_image(img_bytes)
+                if is_table and table_text:
+                    processed_text = table_text
+                    image_type = "table"
+
+                # --- Step 2: Try chart/graph insight extraction via deplot ---
+                if not processed_text:
+                    # chart_insight = extract_chart_insights_from_image(img_bytes)
+                    chart_insight = extract_chart_data_deplot(img_bytes)
+                    if chart_insight:
+                        processed_text = f"Chart insights:\n{chart_insight}"
+                        image_type = "chart"
+
+                # --- Step 3: Fallback to OCR for plain text images ---
+                if not processed_text:
+                    processed_text = ocr_image(img_bytes)
+                    image_type = "ocr"
+
+                if not is_valid_ocr(processed_text):
                     continue
 
                 # Reconstruct code using LLM only if it's a code image
-                if img_chunk_type == "code" and len(extracted_text.split()) > 8:
-                    extracted_text = reconstruct_code_llm(extracted_text)
+                if detect_code(processed_text) and len(processed_text.split()) > 8:
+                    processed_text = reconstruct_code_llm(processed_text)
 
                 uid = hashlib.md5(
-                    f"{path}::img::{section['page_number']}::{extracted_text}".encode()
+                    f"{path}::img::{section['page_number']}::{processed_text}".encode()
                 ).hexdigest()
 
                 file_chunks.append(Chunk(
                     doc_id       = uid,
-                    text         = extracted_text,
+                    text         = processed_text,
                     file_name    = path.name,
                     file_path    = str(path.resolve()),
                     file_type    = file_type,
                     page_number  = section["page_number"],
                     section      = section["section"],
                     is_image     = True,
+                    image_type   = image_type,
                     chunk_index  = -1,
                     total_chunks = -1,
                     parent_id    = hashlib.md5(f"{path}::p{section['page_number']}".encode()).hexdigest(),
-                    chunk_type   = img_chunk_type,   # "table", "chart", "code", "image"
+                    # chunk_type   = img_chunk_type,   # "table", "chart", "code", "image"
                 ))
         tqdm.write(
             f"  {path.name:45s}  {len(sections):4d} sections  ->  {len(file_chunks):4d} chunks"
