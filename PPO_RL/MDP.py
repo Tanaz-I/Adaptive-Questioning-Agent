@@ -24,7 +24,7 @@ class MDP:
     def decode(self, action_idx):
         return self.int_to_actions.get(action_idx, -1)
     
-    def compute_reward(self, ks, topic, score, prev_score, old_earned_diff, old_earned_qtype):
+    """def compute_reward(self, ks, topic, score, prev_score, old_earned_diff, old_earned_qtype):
     
         improvement = score - prev_score
         if score < 0.3 and ks.attempts[topic] > 3:
@@ -63,4 +63,13 @@ class MDP:
             + self.w4 * advancement_bonus
             + self.w5 * prereq_bonus
             + self.w2 * unlock_bonus
-            - self.w3 * mastery_penalty)
+            - self.w3 * mastery_penalty)"""
+            
+    def compute_reward(self, ks, topic, score, prev_score, old_earned_diff, old_earned_qtype):
+        # Reward = improvement in overall knowledge state
+        new_mastered   = sum(1 for t in ks.topics if ks.is_mastered(t))
+        total_topics   = len(ks.topics)
+        prev_avg_score = ks.topic_score[topic]
+        avg_score_gain = score - prev_avg_score  # improvement this step
+        
+        return (0.6 * avg_score_gain) + (0.4 * new_mastered / total_topics)

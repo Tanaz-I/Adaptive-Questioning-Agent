@@ -26,7 +26,7 @@ import chromadb
 import requests
 from chromadb.config import Settings
 
-from PPO_RL.PPOAgent import PPOAgent
+from PPO_RL.PPOAgent1 import PPOAgent
 from NLP import knowledge_base_construction, enrich_metadata, topic_extraction
 from NLP.Q_Generator_A_Evaluator.answer_evaluator import evaluate_answer
 from NLP.Q_Generator_A_Evaluator.question_generator import generate_question
@@ -103,9 +103,9 @@ SUMMARY_CSV_FIELDS = [
 # ─────────────────────────────────────────────
 
 def build_pipeline():
-    # knowledge_base_construction.run_pipeline(DOCS_DIR)
-    # enrich_metadata.enrich_metadata()
-    # topic_extraction.run_global_topic_extraction()
+    #knowledge_base_construction.run_pipeline(DOCS_DIR)
+    #enrich_metadata.enrich_metadata()
+    #topic_extraction.run_global_topic_extraction()
 
     client = chromadb.PersistentClient(
         path=CHROMA_DB_DIR,
@@ -242,7 +242,9 @@ def run_simulation(
 
             # ── RL selects action ──────────────────────────────────────────
             state_vector       = rl_agent.ks.get_state_vector()
-            action_idx   = rl_agent.select_action(state_vector, training=False)[0]
+            #action_idx   = rl_agent.select_action(state_vector, training=False)[0]
+            
+            action_idx = rl_agent.select_action_online(state_vector)
             topic, diff, qtype = rl_agent.mdp.decode(action_idx)
 
             print(f"| {topic} | {diff} | {qtype}")
@@ -273,6 +275,11 @@ def run_simulation(
 
             if question in ("No data", "Insufficient data", "Error"):
                 print(f"  [SKIP] Could not generate question.")
+                
+                for key in ['states', 'actions', 'log_probs', 'values',
+                    'entropies', 'masks', 'dones', 'episode_start']:
+                        if rl_agent.online_buf[key]:
+                            rl_agent.online_buf[key].pop()
                 continue
 
             # ── Simulated student answers ──────────────────────────────────
@@ -290,7 +297,9 @@ def run_simulation(
             score       = eval_result["final_score"]
 
             # ── Update RL agent ────────────────────────────────────────────
-            reward   = rl_agent.update(topic, score, diff, qtype)
+            #reward   = rl_agent.update(topic, score, diff, qtype)
+            
+            reward = rl_agent.record_student_response(topic, score, diff, qtype)
             mastered = [t for t in rl_agent.ks.topics if rl_agent.ks.is_mastered(t)]
 
             print(f"  Score: {round(score,3)}  Reward: {round(reward,3)}  "
@@ -343,7 +352,8 @@ def run_simulation(
             combo_question_count[combo_key] = question_count + 1
             asked_questions_log.setdefault(topic, []).append(question)
 
-    finally:
+    finally:        
+        rl_agent.end_session()
         summary_file.close()
         print(f"\n[Summary CSV closed: {summary_csv_path}]")
 
@@ -532,7 +542,7 @@ if __name__ == "__main__":
         log = run_simulation(
             rl_agent,
             student_type=stype,
-            n_questions=100,
+            n_questions=300,
             topics_difficulty=topics_difficulty,
             dependencies=dependencies,
             concept_graph=concept_graph,
