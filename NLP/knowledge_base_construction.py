@@ -44,7 +44,19 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from img2table.document import Image as Img2TableImage
 from img2table.ocr import TesseractOCR
-from transformers import Pix2StructProcessor, Pix2StructForConditionalGeneration
+from transformers import Pix2StructProcessor, Pix2StructForConditionalGeneration, TableTransformerForObjectDetection, AutoImageProcessor
+import io
+import os
+import tempfile
+from pathlib import Path
+from docling.document_converter import DocumentConverter
+
+import io
+from PIL import Image
+from PIL import Image
+import torch
+from torchvision import transforms
+import io
 processor = Pix2StructProcessor.from_pretrained("google/deplot")
 model = Pix2StructForConditionalGeneration.from_pretrained("google/deplot")
 
@@ -141,26 +153,75 @@ def is_valid_ocr(text):
 
     return True
 
+_docling_converter = None
 
-def extract_table_from_image(image_bytes):
+def _get_docling():
+    global _docling_converter
+    if _docling_converter is None:
+        print("Loading Docling converter...")
+        # Plain constructor — no internal backend imports at all
+        _docling_converter = DocumentConverter()
+    return _docling_converter
+
+
+def extract_table_from_image(image_bytes: bytes, threshold: float = 0.7):
+    """
+    Returns (text: str, is_table: bool) — same interface as before.
+    """
     try:
-        import os
-        os.environ["PATH"] += r";C:\Program Files\Tesseract-OCR"
-        ocr = TesseractOCR()
-        doc = Img2TableImage(src=image_bytes)
-        tables = doc.extract_tables(ocr=ocr, implicit_rows=True, borderless_tables=True)
+        converter = _get_docling()
+
+        # Write to a named temp file — DocumentStream for images is buggy
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp.write(image_bytes)
+            tmp_path = tmp.name
+
+        try:
+            result = converter.convert(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+
+        tables = result.document.tables
         if not tables:
             return "", False
+
+        # Pick the largest table by number of rows
+        best_table = max(tables, key=lambda t: len(t.data.grid))
+        df = best_table.export_to_dataframe()
+
+        if df.shape[0] < 2:
+            return "", False
+
         rows = []
-        for table in tables:
-            df = table.df
-            for _, row in df.iterrows():
-                rows.append(" | ".join(str(c) for c in row if str(c).strip()))
-        result = "\n".join(rows)
-        return (result, True) if len(rows) >= 2 else ("", False)
+        for _, row in df.iterrows():
+            rows.append(" | ".join(str(v).strip() for v in row.values))
+
+        return "\n".join(rows), True
+
     except Exception as e:
-        print(f"[img2table ERROR]: {e}")
+        print(f"[Docling Table ERROR]: {e}")
         return "", False
+
+# def extract_table_from_image(image_bytes):
+#     try:
+#         import os
+#         os.environ["PATH"] += r";C:\Program Files\Tesseract-OCR"
+#         ocr = TesseractOCR()
+#         doc = Img2TableImage(src=image_bytes)
+#         tables = doc.extract_tables(ocr=ocr, implicit_rows=True, borderless_tables=True)
+#         if not tables:
+#             return "", False
+#         rows = []
+#         for table in tables:
+#             df = table.df
+#             print(df)
+#             for _, row in df.iterrows():
+#                 rows.append(" | ".join(str(c).strip() if c is not None else "" for c in row))
+#         result = "\n".join(rows)
+#         return (result, True) if len(rows) >= 2 else ("", False)
+#     except Exception as e:
+#         print(f"[img2table ERROR]: {e}")
+#         return "", False
 
 
 def extract_chart_data_deplot(image_bytes):
