@@ -22,6 +22,7 @@ Usage:
 
 import re
 import io
+import base64
 import shutil
 import hashlib
 import subprocess
@@ -29,11 +30,9 @@ from pathlib import Path
 from dataclasses import dataclass
 import json
 import requests
-
 import pdfplumber
 from pptx import Presentation
 from docx import Document as DocxDocument
-import pytesseract
 from PIL import Image
 import numpy as np
 import cv2
@@ -42,14 +41,11 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity
-
 import nltk
 nltk.download("punkt")
 nltk.download("punkt_tab")
 from nltk.tokenize import sent_tokenize
-
-import pytesseract
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+from image_processing import *
 
 # Configuration
 
@@ -69,22 +65,7 @@ SUPPORTED_EXTS  = {".pptx", ".ppt", ".docx", ".doc", ".pdf", ".txt"}
 # reader = easyocr.Reader(['en'])
 
 
-# ─── FIXED: fall back to the hardcoded path if not found in system PATH ───
-tesseract_path = shutil.which("tesseract") or pytesseract.pytesseract.tesseract_cmd
-print(tesseract_path)
 
-if not tesseract_path or not Path(tesseract_path).exists():
-    raise RuntimeError(
-        "Tesseract not found. Please install it:\n"
-        "Mac: brew install tesseract\n"
-        "Ubuntu: sudo apt install tesseract-ocr\n"
-        "Windows: https://github.com/tesseract-ocr/tesseract"
-    )
-
-pytesseract.pytesseract.tesseract_cmd = tesseract_path
-# ──────────────────────────────────────────────────────────────────────────
-
-# Data model
 
 @dataclass
 class Chunk:
@@ -98,6 +79,8 @@ class Chunk:
     chunk_index:  int           # Index within the page/section
     total_chunks: int           # Total chunks from this page/section
     is_image: bool
+    parent_id:    str = ""          # NEW — MD5 of (file_path + page_number)
+    chunk_type:   str = "text"      # NEW — "text" | "code" | "equation" | "image"
 
 
 # Legacy format conversion (.ppt / .doc -> modern)
@@ -128,45 +111,6 @@ def convert_legacy_files(docs_dir: str):
     if converted:
         print(f"  Converted {converted} legacy file(s).\n")
 
-# def ocr_image(image_bytes):
-
-#     try:
-#         np_arr = np.frombuffer(image_bytes, np.uint8)
-#         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-#         results = reader.readtext(img)
-#         text = " ".join([res[1] for res in results])
-
-#         return text.strip()
-
-#     except Exception:
-#         return ""
-    
-def ocr_image(image_bytes):
-    try:
-        import io
-        img = Image.open(io.BytesIO(image_bytes)).convert("L")
-        img = img.point(lambda x: 0 if x < 140 else 255, '1')
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
-
-        text = pytesseract.image_to_string(img, config='--psm 6')
-
-        def clean_ocr_text(text):
-            lines = text.split("\n")
-
-            cleaned = [
-                l for l in lines
-                if not l.lower().startswith("here is")
-                and not l.lower().startswith("i fixed")
-            ]
-
-            return "\n".join(cleaned)
-        text = clean_ocr_text(text)
-        return text.strip()
-    except Exception as e:
-        print("[OCR ERROR]:", e)
-        return ""
-    
 def is_valid_ocr(text):
     if len(text.split()) < 5:
         return False
@@ -201,7 +145,7 @@ def detect_code(text):
         ):
             score += 1
 
-    return score >= 3
+    return score >= 5
 
 def detect_example(text):
 
@@ -325,7 +269,7 @@ def _extract_pptx(path: Path) -> list[dict]:
         slides.append({
             "page_number": idx,
             "section":     title,
-            "text":        "\n\n".join(parts).strip(),
+            "text":        normalize_text("\n\n".join(parts).strip()),
             "images":      images   
         })
     return slides
@@ -350,7 +294,7 @@ def _extract_pdf(path: Path) -> list[dict]:
             pages.append({
                 "page_number": idx,
                 "section":     f"Page {idx}",
-                "text":        combined.strip(),
+                "text":        normalize_text(combined.strip())
             })
     return pages
 
@@ -395,7 +339,7 @@ def _extract_docx(path: Path) -> list[dict]:
                 sections.append({
                     "page_number": len(sections) + 1,
                     "section":     current_heading,
-                    "text":        "\n".join(current_paras),
+                    "text":        normalize_text("\n".join(current_paras))
                 })
             current_heading = text
             current_paras   = []
@@ -408,7 +352,7 @@ def _extract_docx(path: Path) -> list[dict]:
         sections.append({
             "page_number": len(sections) + 1,
             "section":     current_heading,
-            "text":        "\n".join(current_paras) + table_text,
+            "text":       normalize_text("\n".join(current_paras)) + table_text,
         })
 
     # if no headings, treat as one big section
@@ -440,7 +384,7 @@ def _extract_txt(path: Path) -> list[dict]:
         sections.append({
             "page_number": (i // GROUP_SIZE) + 1,
             "section":     f"Section {(i // GROUP_SIZE) + 1}",
-            "text":        "\n\n".join(group),
+            "text":        normalize_text("\n\n".join(group))
         })
 
     if not sections:
@@ -573,10 +517,20 @@ def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: 
     total = len(raw_chunks)
     result = []
 
+    parent_str = f"{file_path}::p{section['page_number']}"
+    parent_id  = hashlib.md5(parent_str.encode()).hexdigest()
+
     for idx, text in enumerate(raw_chunks):
         # Use full text hash + counter to guarantee uniqueness
         unique_str = f"{file_path}::p{section['page_number']}::c{idx}::{len(text)}::{text}"
         uid = hashlib.md5(unique_str.encode()).hexdigest()
+
+        if detect_code(text):
+            ctype = "code"
+        elif re.search(r'[\$\\]|\\frac|\\sum|\\int|∫|∑|√', text):
+            ctype = "equation"
+        else:
+            ctype = "text"
 
         result.append(Chunk(
             doc_id      = uid,
@@ -589,6 +543,8 @@ def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: 
             is_image    = False,
             chunk_index = idx,
             total_chunks= total,
+            parent_id   = parent_id,
+            chunk_type  = ctype
         ))
     return result
 
@@ -635,7 +591,7 @@ def store_in_vector_db(chunks: list[Chunk]) -> chromadb.Collection:
 
         for c in batch:
 
-            contains_code = detect_code(c.text)
+            contains_code = (c.chunk_type == "code")
             contains_example = detect_example(c.text)
 
             if  len(c.text) > 60:
@@ -660,6 +616,8 @@ def store_in_vector_db(chunks: list[Chunk]) -> chromadb.Collection:
 
                 "contains_code": contains_code,
                 "contains_example": contains_example,
+                "parent_id":    c.parent_id,      
+                "chunk_type":   c.chunk_type
             }
 
             metadatas.append(meta)
@@ -756,22 +714,22 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
             images = section.get("images", [])
 
             for img_bytes in images:
+                extracted_text, img_chunk_type = extract_image_content(img_bytes)
 
-                ocr_text = ocr_image(img_bytes)
-                test = is_valid_ocr(ocr_text)
-                print(test)
-                if not test:
+                if not extracted_text or not is_valid_ocr(extracted_text):
                     continue
-                if detect_code(ocr_text) and len(ocr_text.split()) > 8:
-                    ocr_text = reconstruct_code_llm(ocr_text)
+
+                # Reconstruct code using LLM only if it's a code image
+                if img_chunk_type == "code" and len(extracted_text.split()) > 8:
+                    extracted_text = reconstruct_code_llm(extracted_text)
 
                 uid = hashlib.md5(
-                    f"{path}::img::{section['page_number']}::{ocr_text}".encode()
+                    f"{path}::img::{section['page_number']}::{extracted_text}".encode()
                 ).hexdigest()
 
                 file_chunks.append(Chunk(
                     doc_id       = uid,
-                    text         = ocr_text,
+                    text         = extracted_text,
                     file_name    = path.name,
                     file_path    = str(path.resolve()),
                     file_type    = file_type,
@@ -780,6 +738,8 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
                     is_image     = True,
                     chunk_index  = -1,
                     total_chunks = -1,
+                    parent_id    = hashlib.md5(f"{path}::p{section['page_number']}".encode()).hexdigest(),
+                    chunk_type   = img_chunk_type,   # "table", "chart", "code", "image"
                 ))
         tqdm.write(
             f"  {path.name:45s}  {len(sections):4d} sections  ->  {len(file_chunks):4d} chunks"
@@ -816,9 +776,17 @@ if __name__ == "__main__":
     # Count types
     image_indices = [i for i, m in enumerate(metas) if m.get("source") == "image"]
     text_indices  = [i for i, m in enumerate(metas) if m.get("source") == "text"]
+    code_chunks = [i for i, m in enumerate(metas) if m.get("chunk_type") == "code"]
+    table_chunks = [i for i, m in enumerate(metas) if m.get("chunk_type") == "table"]
+    chart_chunks = [i for i, m in enumerate(metas) if m.get("chunk_type") == "chart"]
+    other_chunks = [i for i, m in enumerate(metas) if m.get("chunk_type") == "image"]
 
     print(f"Text chunks  : {len(text_indices)}")
     print(f"Image chunks : {len(image_indices)}\n")
+    print(f"Code chunks : {len(code_chunks)}\n")
+    print(f"Table chunks : {len(table_chunks)}\n")
+    print(f"Chart chunks : {len(chart_chunks)}\n")
+    print(f"Other chunks : {len(other_chunks)}\n")
 
     # Code / example stats
     code_count = sum(1 for m in metas if m.get("contains_code"))

@@ -485,7 +485,8 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
             "similarity_score": round(c["score"], 4),
             "retrieval_source": "multi_query_mmr",
             "contains_code": meta.get('contains_code'),
-            "contains_example": meta.get('contains_example')
+            "contains_example": meta.get('contains_example'),
+            "parent_id" : meta.get('parent_id')
         })
 
     used_keys = [chunk_key(c["text"]) for c in final_chunks]
@@ -493,31 +494,29 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
     return output, used_keys
 
 def get_neighbor_chunks(chunk, window=1):
-
     _, docs, metas = get_bm25_index()
 
-    file_name = chunk.get("file_name")
-    page = chunk.get("page_number")
-
-    if not file_name or page is None:
-        return []
+    # Support both dict formats (with and without "meta" nesting)
+    if isinstance(chunk, dict) and "meta" in chunk:
+        parent_id = chunk["meta"].get("parent_id", "")
+        file_name = chunk["meta"].get("file_name", "")
+        page      = chunk["meta"].get("page_number")
+    else:
+        parent_id = chunk.get("parent_id", "")
+        file_name = chunk.get("file_name", "")
+        page      = chunk.get("page_number")
 
     neighbors = []
     for doc, meta in zip(docs, metas):
-
-        if meta.get("file_name") != file_name:
+        # Best: exact sibling from same slide via parent_id
+        if parent_id and meta.get("parent_id") == parent_id:
+            neighbors.append({"text": doc, "meta": meta})
             continue
-
-        page2 = meta.get("page_number")
-
-        if page2 is None:
-            continue
-
-        if abs(page2 - page) <= window:
-            neighbors.append({
-                "text": doc,
-                "meta": meta
-            })
+        # Fallback: page proximity in same file (when parent_id not yet stored)
+        if not parent_id and meta.get("file_name") == file_name:
+            p2 = meta.get("page_number")
+            if p2 is not None and page is not None and abs(p2 - page) <= window:
+                neighbors.append({"text": doc, "meta": meta})
 
     return neighbors
 
@@ -576,7 +575,42 @@ if __name__ == "__main__":
         print(f"Slide Title : {c['section']}")
         print(f"Text        : {c['text'][:150]}...\n")
 
-    a = get_neighbor_chunks(chunk=chunks[0])
-    print(f'Ref page = {chunks[0].get("page_number")}')
-    for neighbour in a:
-        print(f"{neighbour['meta'].get('page_number')}")
+    print("\n========== TEST: PARENT_ID GROUPING ==========\n")
+
+target_chunk = chunks[0]
+
+print("TARGET CHUNK:")
+print("Text:", target_chunk["text"][:200])
+print("Page:", target_chunk.get("page_number"))
+print("Section:", target_chunk.get("section"))
+
+# If meta exists (safe handling)
+if "meta" in target_chunk:
+    print("Parent ID:", target_chunk["meta"].get("parent_id"))
+else:
+    print("Parent ID:", target_chunk.get("parent_id"))
+
+print("\n---- NEIGHBORS ----\n")
+
+neighbors = get_neighbor_chunks(chunk=target_chunk)
+
+parent_ids = set()
+pages = set()
+
+for i, n in enumerate(neighbors, 1):
+
+    meta = n["meta"]
+
+    print(f"\nNeighbor {i}")
+    print("Text:", n["text"][:150])
+    print("Page:", meta.get("page_number"))
+    print("Section:", meta.get("section"))
+    print("Parent ID:", meta.get("parent_id"))
+
+    parent_ids.add(meta.get("parent_id"))
+    pages.add(meta.get("page_number"))
+
+print("\n========== SUMMARY ==========")
+print("Unique parent_ids:", parent_ids)
+print("Unique pages:", pages)
+print("Total neighbors:", len(neighbors))
