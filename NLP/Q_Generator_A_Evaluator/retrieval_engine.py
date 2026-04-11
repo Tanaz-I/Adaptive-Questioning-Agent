@@ -519,7 +519,8 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
             "retrieval_source": "multi_query_mmr",
             "contains_code": meta.get('contains_code'),
             "contains_example": meta.get('contains_example'),
-            "parent_id" : meta.get('parent_id')
+            "parent_id" : meta.get('parent_id'),
+            'image_type' : meta.get('image_type')
         })
 
     used_keys = [chunk_key(c["text"]) for c in final_chunks]

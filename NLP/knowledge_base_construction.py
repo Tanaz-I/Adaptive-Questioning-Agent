@@ -957,7 +957,7 @@ if __name__ == "__main__":
     # ---------- VIEW CODE CHUNKS ----------
     print("\n========== CODE CHUNKS ==========\n")
 
-    code_indices = [i for i, m in enumerate(metas) if m.get("contains_code")]
+    code_indices = [i for i, m in enumerate(metas) if m.get("image_type") == 'code']
 
     for idx in code_indices[:5]:
         print(f"\n--- Code Chunk {idx} ---")

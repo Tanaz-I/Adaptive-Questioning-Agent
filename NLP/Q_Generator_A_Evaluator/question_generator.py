@@ -415,7 +415,7 @@ def build_code_injection(chunk, meta):
     If chunk has code, extracts it and builds injection strings for prompts.
     Returns (injection_block: str, instruction: str)
     """
-    if not meta.get("contains_code") and meta.get("chunk_category") != "code":
+    if meta.get("image_type") != "code":
         return "", ""
 
     code_block, _ = extract_code_block(chunk)
@@ -1034,7 +1034,7 @@ def generate_question(topic, difficulty, question_type,
     meta2 = override_code_flag(text2, meta2)
     meta3 = override_code_flag(text3, meta3)
 
-    print(meta2.get("contains_code"))
+    # print(meta2.get("contains_code"))
 
     # def get_chunk_type(chunk):
     #     return chunk.get("chunk_type") or chunk.get("meta", {}).get("chunk_type", "text")
