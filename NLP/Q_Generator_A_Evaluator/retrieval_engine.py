@@ -14,8 +14,9 @@ Author: Member 2
 
 import chromadb
 from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from rank_bm25 import BM25Okapi
+
 
 _CLIENT = None
 _COLLECTION = None
@@ -23,6 +24,36 @@ _COLLECTION = None
 _BM25_INDEX = None
 _CORPUS_DOCS = None
 _CORPUS_METAS = None
+
+_RERANKER = None
+
+def _get_reranker():
+    global _RERANKER
+    if _RERANKER is None:
+        try:
+            _RERANKER = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+            print("[Retrieval] Cross-encoder reranker loaded.")
+        except Exception as e:
+            print(f"[Retrieval] Reranker unavailable: {e}")
+            _RERANKER = False
+    return _RERANKER if _RERANKER else None
+
+
+def rerank_chunks(query: str, chunks: list[dict], top_k: int = 5) -> list[dict]:
+    """
+    Re-scores chunks using a cross-encoder. Falls back silently if unavailable.
+    """
+    reranker = _get_reranker()
+    if not reranker or len(chunks) <= top_k:
+        return chunks[:top_k]
+
+    pairs  = [(query, c["text"][:512]) for c in chunks]
+    scores = reranker.predict(pairs)
+
+    for chunk, score in zip(chunks, scores):
+        chunk["rerank_score"] = float(score)
+
+    return sorted(chunks, key=lambda x: x.get("rerank_score", 0), reverse=True)[:top_k]
 
 DIFF_ORDER = {
     'easy': 0, 'basic': 0,
@@ -464,6 +495,8 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
         if len(final_chunks) >= top_k:
             break
 
+    rerank_query = f"{topic} {difficulty} {question_type}"
+    final_chunks = rerank_chunks(rerank_query, final_chunks, top_k=top_k)
     # ─────────────────────────────────────────────
     # 6. Format output (same structure)
     # ─────────────────────────────────────────────
@@ -551,9 +584,9 @@ if __name__ == "__main__":
 
     # TEST 2: Subtopic-based (IMPORTANT)
     chunks, _ = retrieve_chunks(
-    topic="Constructors",
+    topic="Pointers to Class Members",
     difficulty="medium",
-    question_type="inferential")
+    question_type="factual")
 
     print("\nSubtopics retrieved:")
     # print(chunks)
@@ -575,42 +608,42 @@ if __name__ == "__main__":
         print(f"Slide Title : {c['section']}")
         print(f"Text        : {c['text'][:150]}...\n")
 
-    print("\n========== TEST: PARENT_ID GROUPING ==========\n")
+    # print("\n========== TEST: PARENT_ID GROUPING ==========\n")
 
-    target_chunk = chunks[0]
+    # target_chunk = chunks[0]
 
-    print("TARGET CHUNK:")
-    print("Text:", target_chunk["text"][:200])
-    print("Page:", target_chunk.get("page_number"))
-    print("Section:", target_chunk.get("section"))
+    # print("TARGET CHUNK:")
+    # print("Text:", target_chunk["text"][:200])
+    # print("Page:", target_chunk.get("page_number"))
+    # print("Section:", target_chunk.get("section"))
 
-    # If meta exists (safe handling)
-    if "meta" in target_chunk:
-        print("Parent ID:", target_chunk["meta"].get("parent_id"))
-    else:
-        print("Parent ID:", target_chunk.get("parent_id"))
+    # # If meta exists (safe handling)
+    # if "meta" in target_chunk:
+    #     print("Parent ID:", target_chunk["meta"].get("parent_id"))
+    # else:
+    #     print("Parent ID:", target_chunk.get("parent_id"))
 
-    print("\n---- NEIGHBORS ----\n")
+    # print("\n---- NEIGHBORS ----\n")
 
-    neighbors = get_neighbor_chunks(chunk=target_chunk)
+    # neighbors = get_neighbor_chunks(chunk=target_chunk)
 
-    parent_ids = set()
-    pages = set()
+    # parent_ids = set()
+    # pages = set()
 
-    for i, n in enumerate(neighbors, 1):
+    # for i, n in enumerate(neighbors, 1):
 
-        meta = n["meta"]
+    #     meta = n["meta"]
 
-        print(f"\nNeighbor {i}")
-        print("Text:", n["text"][:150])
-        print("Page:", meta.get("page_number"))
-        print("Section:", meta.get("section"))
-        print("Parent ID:", meta.get("parent_id"))
+    #     print(f"\nNeighbor {i}")
+    #     print("Text:", n["text"][:150])
+    #     print("Page:", meta.get("page_number"))
+    #     print("Section:", meta.get("section"))
+    #     print("Parent ID:", meta.get("parent_id"))
 
-        parent_ids.add(meta.get("parent_id"))
-        pages.add(meta.get("page_number"))
+    #     parent_ids.add(meta.get("parent_id"))
+    #     pages.add(meta.get("page_number"))
 
-    print("\n========== SUMMARY ==========")
-    print("Unique parent_ids:", parent_ids)
-    print("Unique pages:", pages)
-    print("Total neighbors:", len(neighbors))
+    # print("\n========== SUMMARY ==========")
+    # print("Unique parent_ids:", parent_ids)
+    # print("Unique pages:", pages)
+    # print("Total neighbors:", len(neighbors))
