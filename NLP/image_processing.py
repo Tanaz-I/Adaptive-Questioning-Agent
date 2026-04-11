@@ -100,6 +100,36 @@ def ocr_image(image_bytes):
 # ─────────────────────────────────────────────────────────────────────────────
 # Image Type Classification
 # ─────────────────────────────────────────────────────────────────────────────
+def detect_code(text):
+
+    lines = text.split("\n")
+    score = 0
+
+    for line in lines:
+        line = line.strip()
+
+        # STRONG indicators only
+        if (
+            line.startswith("class ") or
+            line.startswith("public ") or
+            line.startswith("private ") or
+            line.startswith("def ") or
+            line.startswith("#include") or
+            "::" in line or
+            "->" in line or
+            ("(" in line and ")" in line and "{" in line) or
+            ("=" in line and ";" in line)
+        ):
+            score += 2   # strong signal
+
+        # WEAK indicators
+        elif (
+            "{" in line or "}" in line or ";" in line
+        ):
+            score += 1
+
+    return score >= 4
+
 
 def classify_image_type(image_bytes: bytes) -> str:
     """
@@ -126,6 +156,15 @@ def classify_image_type(image_bytes: bytes) -> str:
             code_signals = ['{', '}', ';', '::', '->', 'def ', 'class ', '#include', 'return', 'void']
             code_count   = sum(1 for s in code_signals if s in ocr_sample)
             if code_count >= 3:
+                return "code"
+            
+        else:
+            pil_img      = Image.fromarray(gray)
+            ocr_sample   = pytesseract.image_to_string(pil_img, config='--psm 6')
+            print(ocr_sample)
+            detect = detect_code(ocr_sample)
+            print(detect)
+            if detect:
                 return "code"
 
         # # ── Detect bars/blocks of colour (chart indicator) ──

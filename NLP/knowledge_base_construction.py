@@ -52,9 +52,21 @@ import nltk
 nltk.download("punkt")
 nltk.download("punkt_tab")
 from nltk.tokenize import sent_tokenize
-from NLP.image_processing import *
+from image_processing import *
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+tesseract_path = shutil.which("tesseract") or pytesseract.pytesseract.tesseract_cmd
+print(tesseract_path)
+
+if not tesseract_path or not Path(tesseract_path).exists():
+    raise RuntimeError(
+        "Tesseract not found. Please install it:\n"
+        "Mac: brew install tesseract\n"
+        "Ubuntu: sudo apt install tesseract-ocr\n"
+        "Windows: https://github.com/tesseract-ocr/tesseract"
+    )
+
+pytesseract.pytesseract.tesseract_cmd = tesseract_path
 
 # Configuration
 
@@ -254,37 +266,6 @@ Instructions:
         return response.json().get("response", "").strip()
     except Exception:
         return None
-
-
-def detect_code(text):
-
-    lines = text.split("\n")
-    score = 0
-
-    for line in lines:
-        line = line.strip()
-
-        # STRONG indicators only
-        if (
-            line.startswith("class ") or
-            line.startswith("public ") or
-            line.startswith("private ") or
-            line.startswith("def ") or
-            line.startswith("#include") or
-            "::" in line or
-            "->" in line or
-            ("(" in line and ")" in line and "{" in line) or
-            ("=" in line and ";" in line)
-        ):
-            score += 2   # strong signal
-
-        # WEAK indicators
-        elif (
-            "{" in line or "}" in line or ";" in line
-        ):
-            score += 1
-
-    return score >= 5
 
 def detect_example(text):
 
@@ -860,7 +841,7 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
                 processed_text = ""
 
                 # Reconstruct code using LLM only if it's a code image
-                if image_type == "code":
+                if image_type == "code" :
                     code_text = extract_code_from_image(img_bytes)
                     processed_text = reconstruct_code_llm(code_text)
 
