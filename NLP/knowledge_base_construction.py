@@ -864,8 +864,6 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
                     code_text = extract_code_from_image(img_bytes)
                     processed_text = reconstruct_code_llm(code_text)
 
-                image_type = "image"
-
                 # --- Step 1: Try table extraction via Img2Table ---
                 if not processed_text:
                     table_text, is_table = extract_table_from_image(img_bytes)
@@ -892,6 +890,8 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
                 uid = hashlib.md5(
                     f"{path}::img::{section['page_number']}::{processed_text}".encode()
                 ).hexdigest()
+
+                print(f"    {image_type, processed_text}")
 
                 file_chunks.append(Chunk(
                     doc_id       = uid,
