@@ -317,7 +317,7 @@ def validate(result, expected_type="factual"):
 
     if expected_type == "factual":
         if is_mcq_format(q):
-            if not is_valid_mcq(q, result.get("correct_answer", "")):
+            if not is_valid_mcq(result.get("correct_answer", "")):
                 return False
 
     return True
