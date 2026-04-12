@@ -1,13 +1,4 @@
-"""
-app_simulate.py
-===============
-Registered as a Blueprint under /admin in app.py.
 
-Routes:
-    GET  /admin/          → upload page (upload.html)
-    POST /admin/upload    → parse CSV, build summary, redirect to report
-    GET  /admin/report    → render report.html
-"""
 
 import csv
 import io
@@ -15,9 +6,6 @@ from flask import Blueprint, render_template, request, redirect, url_for
 
 simulate_bp = Blueprint('simulate', __name__, url_prefix='/admin')
 
-# ─────────────────────────────────────────────
-# In-memory store (blueprint-local)
-# ─────────────────────────────────────────────
 report_data = {
     "summary"      : [],
     "history"      : [],
@@ -26,10 +14,6 @@ report_data = {
     "course_recs"  : [],
 }
 
-
-# ─────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────
 
 def _float(val):
     try:    return round(float(val), 4)
@@ -40,9 +24,6 @@ def _int(val):
     except: return 0
 
 
-# ─────────────────────────────────────────────
-# CSV → report data
-# ─────────────────────────────────────────────
 
 def parse_csv(file_bytes: bytes) -> dict:
     text   = file_bytes.decode("utf-8")
@@ -52,7 +33,7 @@ def parse_csv(file_bytes: bytes) -> dict:
     if not rows:
         return report_data.copy()
 
-    # history: all rows in order
+    
     history = [
         {
             "q"     : r.get("question", ""),
@@ -62,7 +43,7 @@ def parse_csv(file_bytes: bytes) -> dict:
         for r in rows
     ]
 
-    # summary: last row per topic
+   
     last_per_topic = {}
     for r in rows:
         last_per_topic[r["topic"]] = r
@@ -88,7 +69,7 @@ def parse_csv(file_bytes: bytes) -> dict:
         elif attempts == 0 and prereqs:
             weak_topics.append(topic)
 
-    # recommend_material (same calls as /quit in app.py)
+    
     weak_material = []
     course_recs   = []
 
@@ -117,9 +98,6 @@ def parse_csv(file_bytes: bytes) -> dict:
     }
 
 
-# ─────────────────────────────────────────────
-# Blueprint routes
-# ─────────────────────────────────────────────
 
 @simulate_bp.route("/")
 def home():
