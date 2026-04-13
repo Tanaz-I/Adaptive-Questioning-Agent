@@ -22,54 +22,51 @@ Usage:
 
 import re
 import io
+import base64
 import shutil
 import hashlib
 import subprocess
 from pathlib import Path
 from dataclasses import dataclass
 import json
+import base64
 import requests
-
 import pdfplumber
 from pptx import Presentation
 from docx import Document as DocxDocument
-import pytesseract
+
 from PIL import Image
-import numpy as np
-import cv2
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity
 
+from img2table.document import Image as Img2TableImage
+from img2table.ocr import TesseractOCR
+from transformers import Pix2StructProcessor, Pix2StructForConditionalGeneration, TableTransformerForObjectDetection, AutoImageProcessor
+import io
+import os
+import tempfile
+from pathlib import Path
+from docling.document_converter import DocumentConverter
+
+import io
+from PIL import Image
+from PIL import Image
+import torch
+from torchvision import transforms
+import io
+processor = Pix2StructProcessor.from_pretrained("google/deplot")
+model = Pix2StructForConditionalGeneration.from_pretrained("google/deplot")
+
 import nltk
 nltk.download("punkt")
 nltk.download("punkt_tab")
 from nltk.tokenize import sent_tokenize
+from image_processing import *
 
-import pytesseract
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-
-# Configuration
-
-DOCS_DIR        = "./contents"       # Root directory with all source files
-CHROMA_DB_DIR   = "./chroma_db"
-COLLECTION_NAME = "rag_kb"
-EMBED_MODEL     = "all-MiniLM-L6-v2"
-
-CHUNK_SIZE              = 500                 # Max characters per chunk
-CHUNK_OVERLAP           = 80                  # Overlap between chunks
-CHUNKING_STRATEGY       = "sentence"          # semantic or sentence
-
-SEMANTIC_SIM_THRESHOLD  = 0.4
-
-# Supported extensions
-SUPPORTED_EXTS  = {".pptx", ".ppt", ".docx", ".doc", ".pdf", ".txt"}
-# reader = easyocr.Reader(['en'])
-
-
-# ─── FIXED: fall back to the hardcoded path if not found in system PATH ───
 tesseract_path = shutil.which("tesseract") or pytesseract.pytesseract.tesseract_cmd
 print(tesseract_path)
 
@@ -82,9 +79,27 @@ if not tesseract_path or not Path(tesseract_path).exists():
     )
 
 pytesseract.pytesseract.tesseract_cmd = tesseract_path
-# ──────────────────────────────────────────────────────────────────────────
 
-# Data model
+# Configuration
+
+DOCS_DIR         = "./contents"       # Root directory with all source files
+CHROMA_DB_DIR    = "./chroma_db"
+COLLECTION_NAME  = "rag_kb"
+EMBED_MODEL      = "all-MiniLM-L6-v2"
+MULTIMODAL_MODEL = "llava"
+
+CHUNK_SIZE              = 500                 # Max characters per chunk
+CHUNK_OVERLAP           = 80                  # Overlap between chunks
+CHUNKING_STRATEGY       = "sentence"          # semantic or sentence
+
+SEMANTIC_SIM_THRESHOLD  = 0.4
+
+# Supported extensions
+SUPPORTED_EXTS  = {".pptx", ".ppt", ".docx", ".doc", ".pdf", ".txt"}
+# reader = easyocr.Reader(['en'])
+
+
+
 
 @dataclass
 class Chunk:
@@ -98,6 +113,9 @@ class Chunk:
     chunk_index:  int           # Index within the page/section
     total_chunks: int           # Total chunks from this page/section
     is_image: bool
+    image_type:   str           # image, table, chart, or text
+    parent_id:    str = ""          # NEW — MD5 of (file_path + page_number)
+    chunk_type:   str = "text"      # NEW — "text" | "code" | "equation" | "image"
 
 
 # Legacy format conversion (.ppt / .doc -> modern)
@@ -128,44 +146,6 @@ def convert_legacy_files(docs_dir: str):
     if converted:
         print(f"  Converted {converted} legacy file(s).\n")
 
-# def ocr_image(image_bytes):
-
-#     try:
-#         np_arr = np.frombuffer(image_bytes, np.uint8)
-#         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-
-#         results = reader.readtext(img)
-#         text = " ".join([res[1] for res in results])
-
-#         return text.strip()
-
-#     except Exception:
-#         return ""
-    
-def ocr_image(image_bytes):
-    try:
-        import io
-        img = Image.open(io.BytesIO(image_bytes)).convert("L")
-        img = img.point(lambda x: 0 if x < 140 else 255, '1')
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
-
-        text = pytesseract.image_to_string(img, config='--psm 6')
-
-        def clean_ocr_text(text):
-            lines = text.split("\n")
-
-            cleaned = [
-                l for l in lines
-                if not l.lower().startswith("here is")
-                and not l.lower().startswith("i fixed")
-            ]
-
-            return "\n".join(cleaned)
-        text = clean_ocr_text(text)
-        return text.strip()
-    except Exception as e:
-        print("[OCR ERROR]:", e)
-        return ""
     
 def is_valid_ocr(text):
     if len(text.split()) < 5:
@@ -173,35 +153,180 @@ def is_valid_ocr(text):
 
     return True
 
-def detect_code(text):
+_docling_converter = None
 
-    lines = text.split("\n")
-    score = 0
+def _get_docling():
+    global _docling_converter
+    if _docling_converter is None:
+        print("Loading Docling converter...")
+        # Plain constructor — no internal backend imports at all
+        _docling_converter = DocumentConverter()
+    return _docling_converter
 
-    for line in lines:
-        line = line.strip()
 
-        # STRONG indicators only
-        if (
-            line.startswith("class ") or
-            line.startswith("public ") or
-            line.startswith("private ") or
-            line.startswith("def ") or
-            line.startswith("#include") or
-            "::" in line or
-            "->" in line or
-            ("(" in line and ")" in line and "{" in line) or
-            ("=" in line and ";" in line)
-        ):
-            score += 2   # strong signal
+def extract_table_from_image(image_bytes: bytes, threshold: float = 0.7):
+    """
+    Returns (text: str, is_table: bool) — same interface as before.
+    """
+    try:
+        converter = _get_docling()
 
-        # WEAK indicators
-        elif (
-            "{" in line or "}" in line or ";" in line
-        ):
-            score += 1
+        # Write to a named temp file — DocumentStream for images is buggy
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp.write(image_bytes)
+            tmp_path = tmp.name
 
-    return score >= 3
+        try:
+            result = converter.convert(tmp_path)
+        finally:
+            os.unlink(tmp_path)
+
+        tables = result.document.tables
+        if not tables:
+            return "", False
+
+        # Pick the largest table by number of rows
+        best_table = max(tables, key=lambda t: len(t.data.grid))
+        df = best_table.export_to_dataframe()
+
+        if df.shape[0] < 2:
+            return "", False
+
+        rows = []
+        for _, row in df.iterrows():
+            rows.append(" | ".join(str(v).strip() for v in row.values))
+
+        return "\n".join(rows), True
+
+    except Exception as e:
+        print(f"[Docling Table ERROR]: {e}")
+        return "", False
+
+# def extract_table_from_image(image_bytes):
+#     try:
+#         import os
+#         os.environ["PATH"] += r";C:\Program Files\Tesseract-OCR"
+#         ocr = TesseractOCR()
+#         doc = Img2TableImage(src=image_bytes)
+#         tables = doc.extract_tables(ocr=ocr, implicit_rows=True, borderless_tables=True)
+#         if not tables:
+#             return "", False
+#         rows = []
+#         for table in tables:
+#             df = table.df
+#             print(df)
+#             for _, row in df.iterrows():
+#                 rows.append(" | ".join(str(c).strip() if c is not None else "" for c in row))
+#         result = "\n".join(rows)
+#         return (result, True) if len(rows) >= 2 else ("", False)
+#     except Exception as e:
+#         print(f"[img2table ERROR]: {e}")
+#         return "", False
+
+
+def extract_chart_data_deplot(image_bytes):
+    try:
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        inputs = processor(
+            images=image,
+            text="Generate underlying data table of the figure below:",
+            return_tensors="pt"
+        )
+        predictions = model.generate(**inputs, max_new_tokens=512)
+        result = processor.decode(predictions[0], skip_special_tokens=True)
+        return result.strip() if result.strip() else None
+    except Exception as e:
+        print(f"[Deplot ERROR]: {e}")
+        return None
+
+
+def extract_chart_insights_from_image(image_bytes):
+    """Use LLaVA to directly detect charts/graphs and extract insights — no OCR dependency."""
+    try:
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        prompt = """Analyze this image carefully.
+
+If this image contains a chart, graph, or data visualization (bar chart, line graph, pie chart, scatter plot, etc.):
+- Identify the chart type.
+- Describe the axes, labels, and legend if visible.
+- Summarize the key trend, comparison, or insight in 2-3 concise sentences.
+- Note any significant data points or outliers.
+- Return your analysis starting with: CHART_INSIGHT:
+
+If this image does NOT contain a chart or graph, reply with exactly: NO_CHART"""
+
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": MULTIMODAL_MODEL,
+                "prompt": prompt,
+                "images": [image_b64],
+                "stream": False,
+                "options": {"temperature": 0, "num_predict": 300}
+            },
+            timeout=120
+        )
+        result = response.json().get("response", "").strip()
+
+        if not result or "NO_CHART" in result.upper():
+            return None
+
+        if "CHART_INSIGHT:" in result:
+            return result.split("CHART_INSIGHT:", 1)[1].strip()
+
+        return result  # fallback: return whatever LLaVA gave
+
+    except Exception as e:
+        print(f"[LLaVA CHART ERROR]: {e}")
+        return None
+
+
+def detect_chart_image(text):
+    if not text:
+        return False
+
+    lower = text.lower()
+    keywords = [
+        "chart", "graph", "x-axis", "y-axis", "legend", "series", "plot",
+        "trend", "increase", "decrease", "percentage", "vs ", "axis",
+    ]
+    score = sum(1 for kw in keywords if kw in lower)
+    return score >= 2 and bool(re.search(r"\d+", lower))
+
+
+def summarize_chart_image(image_bytes, extracted_text=""):
+    if not image_bytes:
+        return None
+
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    prompt = f"""
+You are a data analyst. The user has provided a chart or graph image and the OCR text extracted from it.
+Use the image and the text to summarize the main insight, trend, or comparison in 2-3 concise sentences.
+If the chart information is unclear, explain what can be inferred and what is missing.
+
+OCR text:
+{extracted_text.strip()}
+
+Instructions:
+- Focus on the key trend or takeaway.
+- Mention the axes, series, or direction if visible.
+- Do not hallucinate details not present in the image or text.
+"""
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": MULTIMODAL_MODEL,
+                "prompt": prompt,
+                "image": image_b64,
+                "stream": False,
+                "options": {"temperature": 0, "max_output_tokens": 200}
+            },
+            timeout=120
+        )
+        return response.json().get("response", "").strip()
+    except Exception:
+        return None
 
 def detect_example(text):
 
@@ -325,7 +450,7 @@ def _extract_pptx(path: Path) -> list[dict]:
         slides.append({
             "page_number": idx,
             "section":     title,
-            "text":        "\n\n".join(parts).strip(),
+            "text":        normalize_text("\n\n".join(parts).strip()),
             "images":      images   
         })
     return slides
@@ -350,7 +475,7 @@ def _extract_pdf(path: Path) -> list[dict]:
             pages.append({
                 "page_number": idx,
                 "section":     f"Page {idx}",
-                "text":        combined.strip(),
+                "text":        normalize_text(combined.strip())
             })
     return pages
 
@@ -395,7 +520,7 @@ def _extract_docx(path: Path) -> list[dict]:
                 sections.append({
                     "page_number": len(sections) + 1,
                     "section":     current_heading,
-                    "text":        "\n".join(current_paras),
+                    "text":        normalize_text("\n".join(current_paras))
                 })
             current_heading = text
             current_paras   = []
@@ -408,7 +533,7 @@ def _extract_docx(path: Path) -> list[dict]:
         sections.append({
             "page_number": len(sections) + 1,
             "section":     current_heading,
-            "text":        "\n".join(current_paras) + table_text,
+            "text":       normalize_text("\n".join(current_paras)) + table_text,
         })
 
     # if no headings, treat as one big section
@@ -440,7 +565,7 @@ def _extract_txt(path: Path) -> list[dict]:
         sections.append({
             "page_number": (i // GROUP_SIZE) + 1,
             "section":     f"Section {(i // GROUP_SIZE) + 1}",
-            "text":        "\n\n".join(group),
+            "text":        normalize_text("\n\n".join(group))
         })
 
     if not sections:
@@ -573,10 +698,20 @@ def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: 
     total = len(raw_chunks)
     result = []
 
+    parent_str = f"{file_path}::p{section['page_number']}"
+    parent_id  = hashlib.md5(parent_str.encode()).hexdigest()
+
     for idx, text in enumerate(raw_chunks):
         # Use full text hash + counter to guarantee uniqueness
         unique_str = f"{file_path}::p{section['page_number']}::c{idx}::{len(text)}::{text}"
         uid = hashlib.md5(unique_str.encode()).hexdigest()
+
+        if detect_code(text):
+            ctype = "code"
+        elif re.search(r'[\$\\]|\\frac|\\sum|\\int|∫|∑|√', text):
+            ctype = "equation"
+        else:
+            ctype = "text"
 
         result.append(Chunk(
             doc_id      = uid,
@@ -587,8 +722,11 @@ def section_to_chunks(section: dict, file_name: str, file_path: str, file_type: 
             page_number = section["page_number"],
             section     = section["section"],
             is_image    = False,
+            image_type  = "text",
             chunk_index = idx,
             total_chunks= total,
+            parent_id   = parent_id,
+            chunk_type  = ctype
         ))
     return result
 
@@ -635,7 +773,7 @@ def store_in_vector_db(chunks: list[Chunk]) -> chromadb.Collection:
 
         for c in batch:
 
-            contains_code = detect_code(c.text)
+            contains_code = (c.chunk_type == "code")
             contains_example = detect_example(c.text)
 
             if  len(c.text) > 60:
@@ -657,9 +795,12 @@ def store_in_vector_db(chunks: list[Chunk]) -> chromadb.Collection:
                 "total_chunks": c.total_chunks,
 
                 "source": "image" if c.is_image == True else "text",
+                "image_type":   c.image_type,
 
                 "contains_code": contains_code,
                 "contains_example": contains_example,
+                "parent_id":    c.parent_id,      
+                "chunk_type":   c.chunk_type
             }
 
             metadatas.append(meta)
@@ -756,30 +897,58 @@ def run_pipeline(docs_dir: str = DOCS_DIR) -> chromadb.Collection:
             images = section.get("images", [])
 
             for img_bytes in images:
+                image_type = classify_image_type(img_bytes)
 
-                ocr_text = ocr_image(img_bytes)
-                test = is_valid_ocr(ocr_text)
-                print(test)
-                if not test:
+                processed_text = ""
+
+                # Reconstruct code using LLM only if it's a code image
+                if image_type == "code" :
+                    code_text = extract_code_from_image(img_bytes)
+                    processed_text = reconstruct_code_llm(code_text)
+
+                # --- Step 1: Try table extraction via Img2Table ---
+                if not processed_text:
+                    table_text, is_table = extract_table_from_image(img_bytes)
+                    if is_table and table_text:
+                        processed_text = table_text
+                        image_type = "table"
+
+                # --- Step 2: Try chart/graph insight extraction via deplot ---
+                if not processed_text:
+                    # chart_insight = extract_chart_insights_from_image(img_bytes)
+                    chart_insight = extract_chart_data_deplot(img_bytes)
+                    if chart_insight:
+                        processed_text = f"Chart insights:\n{chart_insight}"
+                        image_type = "chart"
+
+                # --- Step 3: Fallback to OCR for plain text images ---
+                if not processed_text:
+                    processed_text = ocr_image(img_bytes)
+                    image_type = "ocr"
+
+                if not is_valid_ocr(processed_text):
                     continue
-                if detect_code(ocr_text) and len(ocr_text.split()) > 8:
-                    ocr_text = reconstruct_code_llm(ocr_text)
 
                 uid = hashlib.md5(
-                    f"{path}::img::{section['page_number']}::{ocr_text}".encode()
+                    f"{path}::img::{section['page_number']}::{processed_text}".encode()
                 ).hexdigest()
+
+                print(f"    {image_type, processed_text}")
 
                 file_chunks.append(Chunk(
                     doc_id       = uid,
-                    text         = ocr_text,
+                    text         = processed_text,
                     file_name    = path.name,
                     file_path    = str(path.resolve()),
                     file_type    = file_type,
                     page_number  = section["page_number"],
                     section      = section["section"],
                     is_image     = True,
+                    image_type   = image_type,
                     chunk_index  = -1,
                     total_chunks = -1,
+                    parent_id    = hashlib.md5(f"{path}::p{section['page_number']}".encode()).hexdigest(),
+                    # chunk_type   = img_chunk_type,   # "table", "chart", "code", "image"
                 ))
         tqdm.write(
             f"  {path.name:45s}  {len(sections):4d} sections  ->  {len(file_chunks):4d} chunks"
@@ -816,9 +985,17 @@ if __name__ == "__main__":
     # Count types
     image_indices = [i for i, m in enumerate(metas) if m.get("source") == "image"]
     text_indices  = [i for i, m in enumerate(metas) if m.get("source") == "text"]
+    code_chunks = [i for i, m in enumerate(metas) if m.get("chunk_type") == "code"]
+    table_chunks = [i for i, m in enumerate(metas) if m.get("chunk_type") == "table"]
+    chart_chunks = [i for i, m in enumerate(metas) if m.get("chunk_type") == "chart"]
+    other_chunks = [i for i, m in enumerate(metas) if m.get("chunk_type") == "image"]
 
     print(f"Text chunks  : {len(text_indices)}")
     print(f"Image chunks : {len(image_indices)}\n")
+    print(f"Code chunks : {len(code_chunks)}\n")
+    print(f"Table chunks : {len(table_chunks)}\n")
+    print(f"Chart chunks : {len(chart_chunks)}\n")
+    print(f"Other chunks : {len(other_chunks)}\n")
 
     # Code / example stats
     code_count = sum(1 for m in metas if m.get("contains_code"))
@@ -841,7 +1018,7 @@ if __name__ == "__main__":
     # ---------- VIEW CODE CHUNKS ----------
     print("\n========== CODE CHUNKS ==========\n")
 
-    code_indices = [i for i, m in enumerate(metas) if m.get("contains_code")]
+    code_indices = [i for i, m in enumerate(metas) if m.get("image_type") == 'code']
 
     for idx in code_indices[:5]:
         print(f"\n--- Code Chunk {idx} ---")

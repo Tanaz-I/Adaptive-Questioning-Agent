@@ -268,7 +268,7 @@ def apply_topic_normalization(collection, mapping: dict):
         canonical = mapping.get(raw_topic)
         if canonical is None:
             # Drop: remap to "Unknown" so it's excluded downstream
-            meta["topic"] = "Unknown"
+            meta["topic"] = meta.get("section", "Unknown")
             batch_ids.append(chunk_id)
             batch_meta.append(meta)
         elif canonical != meta.get("topic"):

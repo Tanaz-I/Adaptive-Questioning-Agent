@@ -50,10 +50,10 @@ SUMMARY_CSV_FIELDS = [
     "keyword_score",
     "nli_score",
     "completeness",
-    "final_score",
-    
-    "reward",
-    
+    "final_score",    
+    "reward",   
+    "error_type",   
+    "feedback",
     "topic_avg_score_so_far",   
     "topic_attempts_so_far",    
     "is_mastered",              
@@ -289,7 +289,8 @@ def run_simulation(
                 "final_score"           : float(score),
                
                 "reward"                : float(reward),
-                
+                "error_type": eval_result.get("error_type", "none"), 
+                "feedback":   eval_result.get("feedback", ""),
                 "topic_avg_score_so_far": topic_avg_score_so_far,
                 "topic_attempts_so_far" : topic_attempts_so_far,
                 "is_mastered"           : is_mastered_now,

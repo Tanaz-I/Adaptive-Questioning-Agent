@@ -353,7 +353,7 @@ def submit():
         return jsonify({
             "score"    : float(score),
             "reward"   : float(reward),
-            "reference": ref,          
+            "reference": ref,
             "feedback"  : eval_result.get("feedback", ""),     
             "error_type": eval_result.get("error_type", "none")
         })

@@ -14,8 +14,9 @@ Author: Member 2
 
 import chromadb
 from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from rank_bm25 import BM25Okapi
+
 
 _CLIENT = None
 _COLLECTION = None
@@ -23,6 +24,36 @@ _COLLECTION = None
 _BM25_INDEX = None
 _CORPUS_DOCS = None
 _CORPUS_METAS = None
+
+_RERANKER = None
+
+def _get_reranker():
+    global _RERANKER
+    if _RERANKER is None:
+        try:
+            _RERANKER = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+            print("[Retrieval] Cross-encoder reranker loaded.")
+        except Exception as e:
+            print(f"[Retrieval] Reranker unavailable: {e}")
+            _RERANKER = False
+    return _RERANKER if _RERANKER else None
+
+
+def rerank_chunks(query: str, chunks: list[dict], top_k: int = 5) -> list[dict]:
+    """
+    Re-scores chunks using a cross-encoder. Falls back silently if unavailable.
+    """
+    reranker = _get_reranker()
+    if not reranker or len(chunks) <= top_k:
+        return chunks[:top_k]
+
+    pairs  = [(query, c["text"][:512]) for c in chunks]
+    scores = reranker.predict(pairs)
+
+    for chunk, score in zip(chunks, scores):
+        chunk["rerank_score"] = float(score)
+
+    return sorted(chunks, key=lambda x: x.get("rerank_score", 0), reverse=True)[:top_k]
 
 DIFF_ORDER = {
     'easy': 0, 'basic': 0,
@@ -464,6 +495,8 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
         if len(final_chunks) >= top_k:
             break
 
+    rerank_query = f"{topic} {difficulty} {question_type}"
+    final_chunks = rerank_chunks(rerank_query, final_chunks, top_k=top_k)
     # ─────────────────────────────────────────────
     # 6. Format output (same structure)
     # ─────────────────────────────────────────────
@@ -485,7 +518,9 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
             "similarity_score": round(c["score"], 4),
             "retrieval_source": "multi_query_mmr",
             "contains_code": meta.get('contains_code'),
-            "contains_example": meta.get('contains_example')
+            "contains_example": meta.get('contains_example'),
+            "parent_id" : meta.get('parent_id'),
+            'image_type' : meta.get('image_type')
         })
 
     used_keys = [chunk_key(c["text"]) for c in final_chunks]
@@ -493,31 +528,29 @@ def retrieve_chunks(topic, difficulty, question_type, used_chunk_ids = None, pre
     return output, used_keys
 
 def get_neighbor_chunks(chunk, window=1):
-
     _, docs, metas = get_bm25_index()
 
-    file_name = chunk.get("file_name")
-    page = chunk.get("page_number")
-
-    if not file_name or page is None:
-        return []
+    # Support both dict formats (with and without "meta" nesting)
+    if isinstance(chunk, dict) and "meta" in chunk:
+        parent_id = chunk["meta"].get("parent_id", "")
+        file_name = chunk["meta"].get("file_name", "")
+        page      = chunk["meta"].get("page_number")
+    else:
+        parent_id = chunk.get("parent_id", "")
+        file_name = chunk.get("file_name", "")
+        page      = chunk.get("page_number")
 
     neighbors = []
     for doc, meta in zip(docs, metas):
-
-        if meta.get("file_name") != file_name:
+        # Best: exact sibling from same slide via parent_id
+        if parent_id and meta.get("parent_id") == parent_id:
+            neighbors.append({"text": doc, "meta": meta})
             continue
-
-        page2 = meta.get("page_number")
-
-        if page2 is None:
-            continue
-
-        if abs(page2 - page) <= window:
-            neighbors.append({
-                "text": doc,
-                "meta": meta
-            })
+        # Fallback: page proximity in same file (when parent_id not yet stored)
+        if not parent_id and meta.get("file_name") == file_name:
+            p2 = meta.get("page_number")
+            if p2 is not None and page is not None and abs(p2 - page) <= window:
+                neighbors.append({"text": doc, "meta": meta})
 
     return neighbors
 
@@ -552,9 +585,9 @@ if __name__ == "__main__":
 
     # TEST 2: Subtopic-based (IMPORTANT)
     chunks, _ = retrieve_chunks(
-    topic="Constructors",
+    topic="Pointers to Class Members",
     difficulty="medium",
-    question_type="inferential")
+    question_type="factual")
 
     print("\nSubtopics retrieved:")
     # print(chunks)
@@ -576,7 +609,42 @@ if __name__ == "__main__":
         print(f"Slide Title : {c['section']}")
         print(f"Text        : {c['text'][:150]}...\n")
 
-    a = get_neighbor_chunks(chunk=chunks[0])
-    print(f'Ref page = {chunks[0].get("page_number")}')
-    for neighbour in a:
-        print(f"{neighbour['meta'].get('page_number')}")
+    # print("\n========== TEST: PARENT_ID GROUPING ==========\n")
+
+    # target_chunk = chunks[0]
+
+    # print("TARGET CHUNK:")
+    # print("Text:", target_chunk["text"][:200])
+    # print("Page:", target_chunk.get("page_number"))
+    # print("Section:", target_chunk.get("section"))
+
+    # # If meta exists (safe handling)
+    # if "meta" in target_chunk:
+    #     print("Parent ID:", target_chunk["meta"].get("parent_id"))
+    # else:
+    #     print("Parent ID:", target_chunk.get("parent_id"))
+
+    # print("\n---- NEIGHBORS ----\n")
+
+    # neighbors = get_neighbor_chunks(chunk=target_chunk)
+
+    # parent_ids = set()
+    # pages = set()
+
+    # for i, n in enumerate(neighbors, 1):
+
+    #     meta = n["meta"]
+
+    #     print(f"\nNeighbor {i}")
+    #     print("Text:", n["text"][:150])
+    #     print("Page:", meta.get("page_number"))
+    #     print("Section:", meta.get("section"))
+    #     print("Parent ID:", meta.get("parent_id"))
+
+    #     parent_ids.add(meta.get("parent_id"))
+    #     pages.add(meta.get("page_number"))
+
+    # print("\n========== SUMMARY ==========")
+    # print("Unique parent_ids:", parent_ids)
+    # print("Unique pages:", pages)
+    # print("Total neighbors:", len(neighbors))
