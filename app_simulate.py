@@ -1,27 +1,11 @@
-"""
-app_simulate.py
-===============
-Minimal Flask app — upload a simulation CSV, view the full report.
 
-Routes:
-    GET  /          → upload page (upload.html)
-    POST /upload    → parse CSV, build summary, redirect to report
-    GET  /report    → render report.html (identical to main app)
 
-Run from your project root (same folder as chroma_db/, contents/, Online_Courses.csv):
-    python app_simulate.py
-"""
-
-import os
 import csv
 import io
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for
 
-app = Flask(__name__)
+simulate_bp = Blueprint('simulate', __name__, url_prefix='/admin')
 
-# ─────────────────────────────────────────────
-# In-memory store
-# ─────────────────────────────────────────────
 report_data = {
     "summary"      : [],
     "history"      : [],
@@ -30,10 +14,6 @@ report_data = {
     "course_recs"  : [],
 }
 
-
-# ─────────────────────────────────────────────
-# Helpers
-# ─────────────────────────────────────────────
 
 def _float(val):
     try:    return round(float(val), 4)
@@ -44,23 +24,8 @@ def _int(val):
     except: return 0
 
 
-# ─────────────────────────────────────────────
-# CSV → report data
-# ─────────────────────────────────────────────
 
 def parse_csv(file_bytes: bytes) -> dict:
-    """
-    Reads the simulation CSV and reconstructs the exact same structures
-    that /quit builds in app.py from rl.ks:
-
-        summary      [{topic, attempts, avg_score, mastered}, ...]
-        weak_topics  [topic, ...]   — same condition as /quit
-        history      [{q, score, reward}, ...]
-
-    Then calls recommend_material (same as /quit) to populate:
-        weak_material
-        course_recs
-    """
     text   = file_bytes.decode("utf-8")
     reader = csv.DictReader(io.StringIO(text))
     rows   = list(reader)
@@ -68,7 +33,7 @@ def parse_csv(file_bytes: bytes) -> dict:
     if not rows:
         return report_data.copy()
 
-    # ── history: all rows in order (= state["history"] in app.py) ─────────
+    
     history = [
         {
             "q"     : r.get("question", ""),
@@ -78,10 +43,10 @@ def parse_csv(file_bytes: bytes) -> dict:
         for r in rows
     ]
 
-    # ── summary: last row per topic (= ks final state per topic) ──────────
+   
     last_per_topic = {}
     for r in rows:
-        last_per_topic[r["topic"]] = r   # overwrite → last row wins
+        last_per_topic[r["topic"]] = r
 
     summary     = []
     weak_topics = []
@@ -99,13 +64,12 @@ def parse_csv(file_bytes: bytes) -> dict:
             "mastered" : mastered,
         })
 
-        # Exact same weak logic as /quit in app.py
         if attempts > 0 and avg_score < 0.5:
             weak_topics.append(topic)
         elif attempts == 0 and prereqs:
             weak_topics.append(topic)
 
-    # ── recommend_material (same calls as /quit in app.py) ────────────────
+    
     weak_material = []
     course_recs   = []
 
@@ -115,7 +79,6 @@ def parse_csv(file_bytes: bytes) -> dict:
         if weak_topics:
             weak_material = get_weak_topic_material(weak_topics)
             print(f"[recommend] weak_material: {weak_material}")
-
             course_recs = recommend_courses(weak_topics, top_n=5)
             print(f"[recommend] course_recs: {course_recs}")
         else:
@@ -135,16 +98,13 @@ def parse_csv(file_bytes: bytes) -> dict:
     }
 
 
-# ─────────────────────────────────────────────
-# Routes
-# ─────────────────────────────────────────────
 
-@app.route("/")
+@simulate_bp.route("/")
 def home():
     return render_template("upload.html")
 
 
-@app.route("/upload", methods=["POST"])
+@simulate_bp.route("/upload", methods=["POST"])
 def upload():
     global report_data
 
@@ -156,10 +116,10 @@ def upload():
         return "Please upload a .csv file.", 400
 
     report_data = parse_csv(f.read())
-    return redirect(url_for("report"))
+    return redirect(url_for("simulate.report"))
 
 
-@app.route("/report")
+@simulate_bp.route("/report")
 def report():
     return render_template(
         "report.html",
@@ -169,9 +129,3 @@ def report():
         weak_material= report_data["weak_material"],
         course_recs  = report_data["course_recs"],
     )
-
-
-# ─────────────────────────────────────────────
-if __name__ == "__main__":
-    print("🌐 Simulation Report → http://127.0.0.1:5000")
-    app.run(debug=True, use_reloader=False)

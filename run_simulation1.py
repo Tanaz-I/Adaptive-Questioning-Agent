@@ -1,3 +1,4 @@
+
 import json
 import csv
 import os
@@ -13,6 +14,7 @@ from NLP.Q_Generator_A_Evaluator.answer_evaluator import evaluate_answer
 from NLP.Q_Generator_A_Evaluator.question_generator import generate_question
 from NLP.concept_graph import build_concept_graph
 from PPO_RL.student_simulator import SimulatedStudent
+
 
 DOCS_DIR        = "./contents"
 CHROMA_DB_DIR   = "./chroma_db"
@@ -34,13 +36,16 @@ diff_map_rl_to_nlp = {"basic": "easy", "intermediate": "medium", "advanced": "ha
 SUMMARY_CSV_FIELDS = [
    
     "step",
-    "student_type",    
+    "student_type",
+   
     "topic",
     "difficulty",
-    "question_type",   
+    "question_type",
+
     "question",
     "student_answer",
-    "reference_answer",   
+    "reference_answer",
+
     "semantic_score",
     "keyword_score",
     "nli_score",
@@ -53,12 +58,16 @@ SUMMARY_CSV_FIELDS = [
     "topic_attempts_so_far",    
     "is_mastered",              
     "topic_prereqs",            
+
     "mastered_count",
 ]
 
 
 
 def build_pipeline():
+    knowledge_base_construction.run_pipeline(DOCS_DIR)
+    enrich_metadata.enrich_metadata()
+    topic_extraction.run_global_topic_extraction()
 
     client = chromadb.PersistentClient(
         path=CHROMA_DB_DIR,
@@ -150,6 +159,7 @@ JSON:"""
     return topics_difficulty, clean_deps, concept_graph
 
 
+
 def run_simulation(
     rl_agent,
     student_type: str,
@@ -175,24 +185,31 @@ def run_simulation(
     used_chunk_ids       = []
     MAX_MEM              = 50
 
-   
-    summary_csv_path = os.path.join(output_dir, f"{student_type}_qa_summary1.csv")
+    summary_csv_path = os.path.join(output_dir, f"{student_type}_qa_summary.csv")
     summary_file     = open(summary_csv_path, "w", newline="", encoding="utf-8")
     summary_writer   = csv.DictWriter(summary_file, fieldnames=SUMMARY_CSV_FIELDS)
     summary_writer.writeheader()
     summary_file.flush()
 
     try:
-        for step in range(n_questions):
+        step = 0
+        attempt = 0
+        
+        while step < n_questions:
 
+            attempt+=1
             print(f"\n[{student_type.upper()}] Q {step + 1}/{n_questions}", end="  ")
 
+           
             state_vector       = rl_agent.ks.get_state_vector()
-            action_idx   = rl_agent.select_action(state_vector, training=False)[0]
+            #action_idx   = rl_agent.select_action(state_vector, training=False)[0]
+            
+            action_idx = rl_agent.select_action_online(state_vector)
             topic, diff, qtype = rl_agent.mdp.decode(action_idx)
 
             print(f"| {topic} | {diff} | {qtype}")
 
+           
             combo_key      = (topic, diff, qtype)
             question_count = combo_question_count.get(combo_key, 0)
             asked          = asked_questions_log.get(topic, [])
@@ -218,7 +235,14 @@ def run_simulation(
 
             if question in ("No data", "Insufficient data", "Error"):
                 print(f"  [SKIP] Could not generate question.")
+                
+                for key in ['states', 'actions', 'log_probs', 'values',
+                    'entropies', 'masks', 'dones', 'episode_start']:
+                        if rl_agent.online_buf[key]:
+                            rl_agent.online_buf[key].pop()
                 continue
+
+            
             student_answer = student.answer(
                 question=question,
                 reference_answer=reference_answer,
@@ -232,31 +256,38 @@ def run_simulation(
             eval_result = evaluate_answer(student_answer, reference_answer, qtype, question)
             score       = eval_result["final_score"]
 
-            reward   = rl_agent.update(topic, score, diff, qtype)
+           
+            reward = rl_agent.record_student_response(topic, score, diff, qtype)
             mastered = [t for t in rl_agent.ks.topics if rl_agent.ks.is_mastered(t)]
 
             print(f"  Score: {round(score,3)}  Reward: {round(reward,3)}  "
                   f"Mastered: {len(mastered)}/{len(rl_agent.ks.topics)}")
 
+           
             topic_avg_score_so_far = round(float(rl_agent.ks.topic_score[topic]), 3)
             topic_attempts_so_far  = int(rl_agent.ks.attempts[topic])
             is_mastered_now        = bool(rl_agent.ks.is_mastered(topic))
             topic_prereqs_str      = ",".join(dependencies.get(topic, []))
 
             log_entry = {
+               
                 "step"                  : step + 1,
                 "student_type"          : student_type,
+              
                 "topic"                 : topic,
                 "difficulty"            : diff,
                 "question_type"         : qtype,
+               
                 "question"              : question,
                 "student_answer"        : student_answer,
                 "reference_answer"      : reference_answer,
+                
                 "semantic_score"        : float(eval_result["semantic_score"]),
                 "keyword_score"         : float(eval_result["keyword_score"]),
                 "nli_score"             : float(eval_result["nli_score"]),
                 "completeness"          : float(eval_result["completeness_score"]),
                 "final_score"           : float(score),
+               
                 "reward"                : float(reward),
                 "error_type": eval_result.get("error_type", "none"), 
                 "feedback":   eval_result.get("feedback", ""),
@@ -264,18 +295,23 @@ def run_simulation(
                 "topic_attempts_so_far" : topic_attempts_so_far,
                 "is_mastered"           : is_mastered_now,
                 "topic_prereqs"         : topic_prereqs_str,
+                
                 "mastered_count"        : int(len(mastered)),
+                
                 "mastered_topics"       : mastered[:],
             }
             session_log.append(log_entry)
 
+          
             summary_writer.writerow({k: log_entry[k] for k in SUMMARY_CSV_FIELDS})
             summary_file.flush()
-
+            
+            step +=1
             combo_question_count[combo_key] = question_count + 1
             asked_questions_log.setdefault(topic, []).append(question)
 
-    finally:
+    finally:        
+        rl_agent.end_session()
         summary_file.close()
         print(f"\n[Summary CSV closed: {summary_csv_path}]")
 
@@ -293,8 +329,10 @@ def _save_results(
 ):
     base = os.path.join(output_dir, student_type)
 
+    
     with open(f"{base}_session_log.json", "w") as f:
         json.dump(log, f, indent=2)
+
 
     if log:
         with open(f"{base}_session_log.csv", "w", newline="", encoding="utf-8") as f:
@@ -316,6 +354,8 @@ def _compute_summary(log: list[dict], rl_agent, dependencies: dict) -> dict:
         return {}
 
     ks = rl_agent.ks
+
+   
     summary_rows = []
     weak_topics  = []
 
@@ -332,16 +372,19 @@ def _compute_summary(log: list[dict], rl_agent, dependencies: dict) -> dict:
             "mastered" : mastered,
         })
 
+        
         if attempts > 0 and avg_score < 0.5:
             weak_topics.append(topic)
         elif attempts == 0 and prereqs:
             weak_topics.append(topic)
 
+   
     history = [
         {"q": r["question"], "score": r["final_score"], "reward": r["reward"]}
         for r in log
     ]
 
+  
     scores   = [r["final_score"] for r in log]
     by_diff  = defaultdict(list)
     by_type  = defaultdict(list)
@@ -355,9 +398,11 @@ def _compute_summary(log: list[dict], rl_agent, dependencies: dict) -> dict:
     def avg(lst): return round(sum(lst) / len(lst), 3) if lst else 0.0
 
     return {
+       
         "summary"             : summary_rows,
         "weak_topics"         : weak_topics,
         "history"             : history,
+
         "total_questions"     : len(log),
         "overall_avg_score"   : avg(scores),
         "avg_by_difficulty"   : {k: avg(v) for k, v in by_diff.items()},
@@ -380,8 +425,6 @@ def _print_summary(summary: dict, student_type: str):
     print(f"Weak Topics      : {summary['weak_topics']}")
     print(f"Final Mastered   : {summary['final_mastered']}")
 
-
-
 if __name__ == "__main__":
 
     print("Building knowledge pipeline...")
@@ -403,7 +446,7 @@ if __name__ == "__main__":
         log = run_simulation(
             rl_agent,
             student_type=stype,
-            n_questions=100,
+            n_questions=200,
             topics_difficulty=topics_difficulty,
             dependencies=dependencies,
             concept_graph=concept_graph,

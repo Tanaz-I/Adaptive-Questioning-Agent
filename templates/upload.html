@@ -2,62 +2,111 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <title>Upload Simulation CSV</title>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Upload Simulation CSV — Adaptive Learning Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
     :root {
-      --bg:      #0f0f13;
-      --surface: #1a1a24;
-      --border:  #2e2e40;
-      --accent:  #7c6ff7;
-      --text:    #e8e8f0;
-      --muted:   #8888aa;
+      --bg:       #08080f;
+      --surface:  #111119;
+      --surface2: #18181f;
+      --border:   #252530;
+      --border2:  #32323f;
+      --accent:   #a78bfa;
+      --accent2:  #38bdf8;
+      --text:     #e8e8f2;
+      --muted:    #6b6b88;
+      --muted2:   #9898b4;
     }
+
     body {
-      font-family: 'DM Sans', sans-serif;
+      font-family: 'Inter', sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
+      padding: 24px;
+      overflow-x: hidden;
     }
+
+    /* ── Ambient blobs ── */
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(130px);
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.15;
+    }
+    .blob-1 { width:500px;height:500px;background:radial-gradient(circle,#7c3aed,transparent 70%);top:-160px;left:-160px; }
+    .blob-2 { width:400px;height:400px;background:radial-gradient(circle,#0ea5e9,transparent 70%);bottom:-120px;right:-120px; }
+
+    /* ── Card ── */
     .card {
+      position: relative;
+      z-index: 1;
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 48px 44px;
+      border-radius: 20px;
+      padding: 52px 48px 44px;
       width: 100%;
-      max-width: 460px;
+      max-width: 480px;
       text-align: center;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.55);
+      animation: fadeUp 0.5s ease both;
     }
+    @keyframes fadeUp {
+      from { opacity:0; transform: translateY(20px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+
+    /* ── Logo ── */
+    .logo-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+    .logo-text {
+      font-family: 'Syne', sans-serif;
+      font-size: 0.88rem;
+      color: var(--muted2);
+      font-weight: 600;
+    }
+
     h1 {
-      font-family: 'DM Serif Display', serif;
-      font-size: 1.9rem;
-      background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+      font-family: 'Syne', sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 8px;
+      line-height: 1.1;
     }
     .sub {
-      color: var(--muted);
+      color: var(--muted2);
       font-size: 0.85rem;
       margin-bottom: 36px;
+      line-height: 1.55;
     }
+
+    /* ── Drop zone ── */
     .drop-zone {
-      border: 2px dashed var(--border);
-      border-radius: 12px;
-      padding: 36px 20px;
+      border: 2px dashed var(--border2);
+      border-radius: 14px;
+      padding: 44px 24px;
       cursor: pointer;
-      transition: border-color 0.2s, background 0.2s;
-      margin-bottom: 24px;
       position: relative;
-    }
-    .drop-zone:hover,
-    .drop-zone.dragover {
-      border-color: var(--accent);
-      background: rgba(124,111,247,0.05);
+      text-align: center;
+      transition: border-color 0.25s, background 0.25s;
+      margin-bottom: 18px;
     }
     .drop-zone input[type="file"] {
       position: absolute;
@@ -67,44 +116,120 @@
       width: 100%;
       height: 100%;
     }
-    .drop-icon { font-size: 2rem; margin-bottom: 10px; }
-    .drop-text { font-size: 0.9rem; color: var(--muted); }
-    .file-name {
-      font-size: 0.82rem;
-      color: var(--accent);
-      margin-top: 8px;
-      min-height: 18px;
+    .drop-zone:hover,
+    .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(167,139,250,0.05);
     }
-    button {
+    .drop-inner { pointer-events: none; }
+
+    .drop-icon-wrap {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 60px; height: 60px;
+      border-radius: 14px;
+      background: rgba(167,139,250,0.1);
+      border: 1px solid rgba(167,139,250,0.2);
+      margin-bottom: 14px;
+    }
+    .drop-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+    .drop-hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    /* ── File name display ── */
+    .file-name {
+      font-size: 0.8rem;
+      color: var(--accent);
+      font-weight: 500;
+      min-height: 18px;
+      margin-bottom: 18px;
+      word-break: break-all;
+    }
+
+    /* ── Submit button ── */
+    .btn-submit {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       width: 100%;
-      padding: 14px;
-      background: var(--accent);
+      padding: 14px 20px;
+      background: linear-gradient(135deg, #7c3aed, #4f46e5);
       color: #fff;
       border: none;
-      border-radius: 10px;
+      border-radius: 12px;
+      font-family: 'Syne', sans-serif;
       font-size: 0.95rem;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
-      font-family: 'DM Sans', sans-serif;
-      transition: opacity 0.2s;
+      letter-spacing: 0.2px;
+      transition: opacity 0.2s, transform 0.15s;
     }
-    button:hover { opacity: 0.88; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-submit:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+    .btn-submit:disabled { opacity: 0.3; cursor: not-allowed; }
   </style>
 </head>
 <body>
-<div class="card">
-  <h1>Simulation Report</h1>
-  <p class="sub">Upload the file to view the session report</p>
 
-  <form method="POST" action="/upload" enctype="multipart/form-data" id="uploadForm">
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+
+<div class="card">
+
+  <div class="logo-row">
+    <svg width="22" height="22" viewBox="0 0 28 28" fill="none">
+      <circle cx="14" cy="14" r="13" stroke="url(#lgu)" stroke-width="2"/>
+      <path d="M9 14l3.5 3.5L19 10" stroke="url(#lgu)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs>
+        <linearGradient id="lgu" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#a78bfa"/><stop offset="1" stop-color="#38bdf8"/>
+        </linearGradient>
+      </defs>
+    </svg>
+    <span class="logo-text">AdaptiveLearn</span>
+  </div>
+
+  <h1>Simulation Report</h1>
+  <p class="sub">Upload your session CSV to view the full performance report.</p>
+
+  <form method="POST" action="/admin/upload" enctype="multipart/form-data" id="uploadForm">
+
     <div class="drop-zone" id="dropZone">
       <input type="file" name="csv_file" id="csvFile" accept=".csv" required>
-      <div class="drop-icon">📂</div>
-      <div class="drop-text">Click or drag &amp; drop your CSV here</div>
-      <div class="file-name" id="fileName"></div>
+      <div class="drop-inner">
+        <div class="drop-icon-wrap">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <path d="M14 4v16M7 11l7-7 7 7" stroke="url(#upico)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 21h20" stroke="url(#upico)" stroke-width="2" stroke-linecap="round" opacity=".5"/>
+            <defs>
+              <linearGradient id="upico" x1="4" y1="4" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#a78bfa"/><stop offset="1" stop-color="#38bdf8"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <p class="drop-title">Drag &amp; drop CSV here</p>
+        <p class="drop-hint">or click to browse</p>
+      </div>
     </div>
-    <button type="submit" id="submitBtn" disabled>Generate Report →</button>
+
+    <div class="file-name" id="fileName"></div>
+
+    <button type="submit" class="btn-submit" id="submitBtn" disabled>
+      <span>Generate Report</span>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+
   </form>
 </div>
 
@@ -114,11 +239,14 @@
   const submitBtn = document.getElementById('submitBtn');
   const dropZone  = document.getElementById('dropZone');
 
+  function setFile(file) {
+    if (!file) return;
+    fileName.textContent  = '📄 ' + file.name;
+    submitBtn.disabled    = false;
+  }
+
   input.addEventListener('change', () => {
-    if (input.files.length) {
-      fileName.textContent = input.files[0].name;
-      submitBtn.disabled = false;
-    }
+    if (input.files.length) setFile(input.files[0]);
   });
 
   dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('dragover'); });
@@ -126,10 +254,10 @@
   dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
-    input.files = e.dataTransfer.files;
-    if (input.files.length) {
-      fileName.textContent = input.files[0].name;
-      submitBtn.disabled = false;
+    const files = e.dataTransfer.files;
+    if (files.length) {
+      input.files = files;
+      setFile(files[0]);
     }
   });
 </script>

@@ -228,7 +228,7 @@ def generate_feedback(student: str, reference: str,
     missing_str = ", ".join(missing) if missing else "key concepts"
 
     templates = {
-        "off_topic":   f"Your answer doesn't address the question. Re-read: {question[:80]}",
+        "off_topic":   f"Your answer doesn't address the question. Re-read: {question[:]}",
         "conceptual":  f"Core concept misunderstood. Review: {missing_str}.",
         "partial":     f"Partially correct. Missing details on: {missing_str}.",
         "code_syntax": "Code logic may be right but contains syntax errors. Review carefully.",

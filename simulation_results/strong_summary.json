@@ -1,0 +1,1068 @@
+{
+  "summary": [
+    {
+      "topic": "Constructors",
+      "attempts": 48,
+      "avg_score": 0.885,
+      "mastered": false
+    },
+    {
+      "topic": "Destructors",
+      "attempts": 15,
+      "avg_score": 0.96,
+      "mastered": false
+    },
+    {
+      "topic": "Object Oriented Programming",
+      "attempts": 58,
+      "avg_score": 0.904,
+      "mastered": true
+    },
+    {
+      "topic": "Operator Functions",
+      "attempts": 45,
+      "avg_score": 0.873,
+      "mastered": false
+    },
+    {
+      "topic": "Operator Overloading",
+      "attempts": 33,
+      "avg_score": 0.898,
+      "mastered": false
+    }
+  ],
+  "weak_topics": [],
+  "history": [
+    {
+      "q": "What are the different types of constructors in Object Oriented Programming?",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "How does defining a pointer to a class type, as shown below, enable accessing members with the `->` operator? \n\n```\n\\nint main() {\\n    simple obj;\\n    simple* ptr = &obj;\\n    cout << obj.ar;\\n    cout << ptr->ar;\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "```\n++\\n#include <iostream>\\nusing namespace std;\\n\\nclass Circle {\\npublic:\\n    double radius;\\n    Circle(double newRadius) : radius(newRadius) {}\\n    double getArea() {\\n        return M_PI * radius * radius;\\n    }\\n};\\n\\nint main() {\\n    Circle circle1(1.0);\\n    Circle circle2();\\n    Circle circle3(15);\\n\\n    cout << \\\"The area of the circle of radius \\\" << circle1.radius << \\\" is \\\" << circle1.getArea() << endl;\\n    cout << \\\"The area of the circle of radius \\\" << circle2.radius << \\\" is \\\" << circle2.getArea() << endl;\\n    cout << \\\"The area of the circle of radius \\\" << circle3.radius << \\\" is \\\" << circle3.getArea() << endl;\\n\\n    circle1.radius = 7.0;\\n    cout << \\\"The area of the circle of radius \\\" << circle1.radius << \\\" is \\\" << circle1.getArea() << endl;\\n    return 0;\\n}\\n\n```\nWhen would using a parameterized constructor actually worsen program behavior when working with objects of class `Circle`? Consider the following code:\\n```c++\\n#include <iostream>\\nusing namespace std;\\n\\nclass Circle {\\npublic:\\n    double radius;\\n    Circle(double newRadius) : radius(newRadius) {}\\n    double getArea() {\\n        return M_PI * radius * radius;\\n    }\\n};\\n\\nint main() {\\n    Circle circle1(1.0);\\n    Circle circle2();\\n    Circle circle3(15);\\n\\n    cout << \\\"The area of the circle of radius \\\" << circle1.radius << \\\" is \\\" << circle1.getArea() << endl;\\n    cout << \\\"The area of the circle of radius \\\" << circle2.radius << \\\" is \\\" << circle2.getArea() << endl;\\n    cout << \\\"The area of the circle of radius \\\" << circle3.radius << \\\" is \\\" << circle3.getArea() << endl;\\n\\n    circle1.radius = 7.0;\\n    cout << \\\"The area of the circle of radius \\\" << circle1.radius << \\\" is \\\" << circle1.getArea() << endl;\\n    return 0;\\n}\\n```\\n",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "What is the most significant limitation of overloading I/O stream operators that the use of destructors addresses?",
+      "score": 0.739,
+      "reward": -0.11744999999999998
+    },
+    {
+      "q": "`Leftmost operand must be of same class as operator function. Use this keyword to implicitly get left operand argument. Operators (), [], -> or any assignment operator must be overloaded as a class member function.   Overloading does not actually add any capabilities to C++. Everything you can do with an overloaded operator you can also do with a function.   However, overloaded operators make your programs easier to write, read, and maintain. -> | << [], -> or any assignment operator must be overloaded as a class member function. Called when   Left operand of binary operator is of this class   Single operand of unary operator is of this class Can have object of different class than operator   class Time   {int hrs, mins;   public:   Time (int h,int m)   {\thrs=h;mins=m;  }   void show()   {\tcout<<hrs<<\u201c:\u201d<<mins;  }   void sum(Time t)   {\thrs+=t.hrs;  mins+=t.mins;   }   Time operator + (Time t)   {\tTime temp;   temp.hrs=hrs+t.hrs;   temp.mins=mins+t.mins;   return temp;   }   }; int main() { Time t1(10,20), t2(11,30); t1.show(); t2.show(); // t1.sum(t2); t1=t1+ t2; t1.show(); t2.show(); }` What does the code indicate about the leftmost operand of an operator function?",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "What happens when the function call operator is overloaded?",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "What happens when a class does not explicitly define a constructor, and an object of that class is created?",
+      "score": 0.943,
+      "reward": 0.0
+    },
+    {
+      "q": "Compare the role of constructors in allocating memory for data members versus their responsibility in initializing those members. What is the primary advantage of explicitly defining a constructor over relying on the compiler's default implementation?",
+      "score": 1.0,
+      "reward": 0.01709999999999998
+    },
+    {
+      "q": "What happens to an object's memory when its destructor is called, and why does this occur?",
+      "score": 1.0,
+      "reward": 0.031320000000000014
+    },
+    {
+      "q": "What is operator overloading in the context of Object Oriented Programming?",
+      "score": 1.0,
+      "reward": 0.026099999999999988
+    },
+    {
+      "q": "How do constructors enable the use of friend functions to overload binary operators, and what implications does this have for object-oriented programming?",
+      "score": 1.0,
+      "reward": 0.022371428571428553
+    },
+    {
+      "q": "How does using pointers with objects relate to operator overloading in Object Oriented Programming?",
+      "score": 0.936,
+      "reward": -0.01402500000000002
+    },
+    {
+      "q": "What happens when we use a pointer to access a class member variable, as shown in the following code:\n```\n\\nint main() {\\n    simple obj;\\n    simple* ptr = &obj;\\n    cout << obj.ar;\\n    cout << ptr->ar;\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.021666666666666588
+    },
+    {
+      "q": "```\ns3=s1;\\n  When a copy of an object is made to be passed to a function\\n    show(s2);\\n  Returning an object by value from a function\\n    s3=fun();\\n  When a temporary object is generated\\n\n```\nHow does the copy constructor enable making a copy of an object when one object explicitly initializes another, as shown in the following code:\\n```sum s3=s1;\\n  When a copy of an object is made to be passed to a function\\n    show(s2);\\n  Returning an object by value from a function\\n    s3=fun();\\n  When a temporary object is generated\\n```\\nand what role does the destructor play in this process?",
+      "score": 1.0,
+      "reward": 0.019499999999999917
+    },
+    {
+      "q": "How does the return type of an overloaded << operator function enable chaining multiple outputs to a single cout statement, as shown in the following code:\n```\n\\nclass Point\\n{\\npublic:\\nint x,y;\\nPoint () {}\\nPoint (int,int);\\nfrend ostream& operator<<(ostream&, const point&);\\nfrend istream& operator>>(istream&, const point&);\\n};\\nPoint::Point (int a, int b)\\n{  x = a;  y = b;}\\nostream& operator<<(ostream& os, const Point& a)\\n{    os << a.x;\\nos << a.y;\\nreturn os;  }\\nistream& operator>>(istream& is, Point& a)\\n{    is >> a.x;\\nis >> a.y;\\nreturn is;  }\\nmain()\\n{\\nPoint p1(2,3), p2(0,0);\\ncin>>p2;    // operator >>(cin, p2);  //cin.operator>>(p2)\\n\\n cout<<p1;  // operator <<(cout, p1);\\n\\n cout<<p2;\\n\n```",
+      "score": 1.0,
+      "reward": 0.017727272727272658
+    },
+    {
+      "q": "How does the automatic destruction of objects enable memory deallocation when an object goes out of scope, and what role do destructors play in this process?",
+      "score": 0.987,
+      "reward": 0.00909999999999993
+    },
+    {
+      "q": "```\n\\nclass Data {\\npublic:\\nint a;\\n};\\nint main() {\\nData d;\\nd.a = 15;\\nstd::cout << d.*(&Data::a) << std::endl;\\nreturn 0;\\n}\\n\n```\nHow does using pointers to class members enable accessing data members of a class when one object initializes another, as shown in the following code:\\n```\\nclass Data {\\npublic:\\nint a;\\n};\\nint main() {\\nData d;\\nd.a = 15;\\nstd::cout << d.*(&Data::a) << std::endl;\\nreturn 0;\\n}\\n```\\nand what role do constructors play in this process?",
+      "score": 0.899,
+      "reward": -0.04033846153846159
+    },
+    {
+      "q": "How does operator overloading enable chaining multiple outputs to a single cout statement when one object initializes another, and what role do constructors play in this process?",
+      "score": 0.962,
+      "reward": -0.002357142857142902
+    },
+    {
+      "q": "How does the copy constructor enable making a copy of an object when one object explicitly initializes another?",
+      "score": 0.0,
+      "reward": -0.5409200000000001
+    },
+    {
+      "q": "How can a class get a default constructor in two ways, and what happens when no initialization of its data members is necessary?",
+      "score": 0.84,
+      "reward": -0.0526
+    },
+    {
+      "q": "What happens when you use the pointer to function member `pprint` on an object like `dl`?",
+      "score": 1.0,
+      "reward": 0.055387499999999944
+    },
+    {
+      "q": "When creating new overloaded operators, programmers are restricted from changing the meaning of which operator?",
+      "score": 0.841,
+      "reward": -0.038999999999999965
+    },
+    {
+      "q": "How does using pointers to class members enable accessing data members of a class when one object initializes another, as shown in the following code:\n```\n\\nsimple obj;\\nsimple* ptr = &obj;\\ncout << obj.ar;\\ncout << ptr->ar;\\n\n```\nand what role do constructors play in this process?",
+      "score": 1.0,
+      "reward": 0.05212941176470585
+    },
+    {
+      "q": "How does using pointers to class members enable accessing data members of a class when one object initializes another, as shown in the following code:\n```\n\\nclass Data {\\npublic:\\nint a;\\n};\\nint main() {\\nData d;\\nd.a = 15;\\nstd::cout << d.*(&Data::a) << std::endl;\\nreturn 0;\\n}\\n\n```\nand what role do constructors play in this process?",
+      "score": 0.908,
+      "reward": -0.0029000000000000137
+    },
+    {
+      "q": "What happens when a destructor is called in a class that has both constructors and destructors, like Ceo?",
+      "score": 0.865,
+      "reward": 0.0
+    },
+    {
+      "q": "What type of function must be used to overload operators (), [ ], -> or any assignment operator?",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "`public class Circle {     public static void main(String[] args) {         double radius = 1;         System.out.println(",
+      "score": 0.947,
+      "reward": 0.01968000000000003
+    },
+    {
+      "q": "How does using pointers to class members enable accessing data members of a class when one object initializes another, as shown in the following code:\n```\n\\n#include <iostream>\\n\\nclass Data {\\npublic:\\nint a;\\n};\\n\\nint main() {\\nData d;\\nd.a = 15;\\nstd::cout << d.*(&Data::a) << std::endl;\\nreturn 0;\\n}\\n\n```\nWhat role do constructors play in this process?",
+      "score": 1.0,
+      "reward": 0.04954736842105258
+    },
+    {
+      "q": "According to the code, what does it indicate about the leftmost operand of an operator function?",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "Under what conditions would you prefer to explicitly define a constructor over relying on the compiler's default implementation, and how does this approach affect object initialization?",
+      "score": 1.0,
+      "reward": 0.04290000000000007
+    },
+    {
+      "q": "```\n\\nString(const String& s)\\n{\\ndata = new char[strlen(s.data)+1];\\nstrcpy(data, s.data);\\n}\\nvoid main()\\n{\\nString s = \\\"hello\\\";\\nString t = s;\t// same as String t(s);\\ns.display( );\\nt.display( );\\nt.assign(\\\"world\\\");\\ns.display( );\\nt.display( );\\n}\\n#include<string.h>\\nclass String\\n{   char* data;\\npublic:\\nString(const char* s = \\\"\\\")\\n{\\ndata = new char[20];\\nstrcpy(data,s);\\n}\\n~String( )\\n{\\ndelete [ ] data;\\n}\\nvoid assign(char *str)\\n{\\nstrcpy(data,str); \t}\\nvoid display()\\n{\\ncout << data;         \t}\\n};\\n\n```\nHow does the copy constructor's use of dynamic memory allocation enable deep copying of an object when one object initializes another, as shown in the following code:\\n```\\nString(const String& s)\\n{\\ndata = new char[strlen(s.data)+1];\\nstrcpy(data, s.data);\\n}\\nvoid main()\\n{\\nString s = \\\"hello\\\";\\nString t = s;\t// same as String t(s);\\ns.display( );\\nt.display( );\\nt.assign(\\\"world\\\");\\ns.display( );\\nt.display( );\\n}\\n#include<string.h>\\nclass String\\n{   char* data;\\npublic:\\nString(const char* s = \\\"\\\")\\n{\\ndata = new char[20];\\nstrcpy(data,s);\\n}\\n~String( )\\n{\\ndelete [ ] data;\\n}\\nvoid assign(char *str)\\n{\\nstrcpy(data,str); \t}\\nvoid display()\\n{\\ncout << data;         \t}\\n};\\n```\\nand what happens when the `assign` method is called on the copied object?",
+      "score": 1.0,
+      "reward": 0.047069999999999945
+    },
+    {
+      "q": "How does the syntax for overloading an operator using a member function differ from that of using a friend function? Explain why this difference exists.",
+      "score": 0.914,
+      "reward": 0.014700000000000046
+    },
+    {
+      "q": "When choosing between constructors with default arguments and parameterized constructors for initializing objects, which would you prefer to use in a large codebase and why? Consider the following code:\n```\n\\n  class sum\\n  {\\n  int x, y;\\n  public:\\n  void print()\\n  {\tcout<<\u201cx = \u201c<<x<<\u201cy =\u201c<<y;  }\\n  sum(int i, int j=10);\\n  };\\n  sum::sum(int i,int j)\\n  {\\n  x=i;y=j;\\n  }\\n  void main()\\n  {\\n  sum s1(1),s2(8,9);\\n  s1.print();\\n  s2.print();\\n  }\\n\n```",
+      "score": 1.0,
+      "reward": 0.03677142857142863
+    },
+    {
+      "q": "`int main() {\n    Data d;\nd.a = 15;\nstd::cout << d.*(&Data::a) << std::endl;\nreturn 0;\n}` What happens when `d.*(&Data::a)` is executed?",
+      "score": 0.974,
+      "reward": 0.029971428571428513
+    },
+    {
+      "q": "`int main() {\n    simple obj;\nsimple* ptr = &obj;\ncout << obj.ar;\ncout << ptr->ar;\n}` What does `ptr->ar` do?",
+      "score": 0.991,
+      "reward": 0.03834545454545448
+    },
+    {
+      "q": "How does the concept of destructors relate to operator overloading in C++?",
+      "score": 1.0,
+      "reward": 0.032175000000000016
+    },
+    {
+      "q": "How do constructors with default arguments enable more flexible object initialization, and what happens when an object is created without providing all the required parameters?",
+      "score": 1.0,
+      "reward": 0.028600000000000046
+    },
+    {
+      "q": "`int main() {\n    simple obj;\n    simple* ptr = &obj;\n    cout << obj.ar;\n    cout << ptr->ar;\n}` What does `ptr->ar` do?",
+      "score": 1.0,
+      "reward": 0.04184347826086952
+    },
+    {
+      "q": "How do conversion functions enable type conversion from a class type to a basic type?",
+      "score": 0.918,
+      "reward": -0.03935999999999999
+    },
+    {
+      "q": "When would using the function call operator overload actually worsen program behavior when compared to its default interpretation, and what specific aspect of the overloaded operator's functionality contributes to this worsening?",
+      "score": 0.59,
+      "reward": -0.19680000000000003
+    },
+    {
+      "q": "What is the return type of the function to overload the operator <<?",
+      "score": 1.0,
+      "reward": 0.040099999999999976
+    },
+    {
+      "q": "How does the use of friend functions in operator overloading enable commutative behavior when the leftmost operand is not an object of the class, as shown in the following code:\n```\n\\nclass Point\\n{\\nint x,y;\\nPoint () {}\\nPoint (int, int);\\nfrend Point operator +(int, Point);\\nfrend Point operator +(Point, int);\\n};\\nPoint::Point (int a, int b)\\n{  x = a;  y = b; }\\nPoint operator+ (Point P, int i)\\n{  \tPoint temp;\\ntemp.x = P.x + i;\\ntemp.y = P.y + i;\\nreturn (temp);\\n}\\nPoint operator+ (int i, Point P)\\n{  \tPoint temp;\\ntemp.x = i + P.x;\\ntemp.y = i + P.y;\\nreturn (temp);\\n}\\nmain ()\\n{\\n  Point a (3,1);\\n  Point b (1,2);\\n  Point c;\\nc = a + 5;\\n  cout << c.x << \",\" << c.y;\\nc=10+a;\\n  cout << c.x << \",\" << c.y;\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.04217142857142857
+    },
+    {
+      "q": "When would using a constructor with a single argument for converting basic types to class types actually worsen program behavior, and how does this relate to the concept of type conversions in object-oriented programming?",
+      "score": 0.839,
+      "reward": -0.05424000000000002
+    },
+    {
+      "q": "What happens when a destructor is called for an object allocated using new?",
+      "score": 0.92,
+      "reward": -0.005423076923076931
+    },
+    {
+      "q": "`However, what if you wish to use an operator to manipulate class objects? Operator Overloading - C++ allows you to redefine standard operators work when used with class objects   Using traditional operators with user-defined objects   A way of achieving static polymorphism is Operator overloading     Operator << is both the stream-insertion operator and the bitwise left-shift operator`  What is the primary purpose of operator overloading in C++?",
+      "score": 0.901,
+      "reward": -0.027719999999999943
+    },
+    {
+      "q": "How do the rules for overloading operators affect the relationship between operator operands and function arguments?",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "What happens when an object is created without providing all the required parameters for a constructor with default arguments, as shown below?\n```\n\\nAn important difference between constructors and other functions is that constructors cannot return values, so they cannot specify a return type (not even void)\\nThe constructor is invoked whenever an object of its associated class is created\\n\n```",
+      "score": 0.905,
+      "reward": -0.02301818181818176
+    },
+    {
+      "q": "When would you prefer overloading the unary operator `->` to access a class member variable, rather than using the pointer syntax `class_name -> *pointer_name`, and what are the key differences between these two approaches?",
+      "score": 0.924,
+      "reward": -0.002911111111111131
+    },
+    {
+      "q": "```\n\\n#include<iostream>\\nusing namespace std;\\nclass Time\\n{\\nint hrs, mins;\\npublic:\\nTime (int h,int m)\\n{\thrs=h;mins=m;  }\\nvoid show()\\n{\tcout<<hrs<<\u201c:\u201d<<mins;  }\\nf friend Time operator + (Time t1,time t2);\\n};\\nTime operator + (time t1,time t2)\\n{\\nTime temp;\\ntemp.hrs=t1.hrs+t2.hrs;\\ntemp.mins=t1.mins+t2.mins;\\nreturn temp;\\n}\\nint main()\\n{\\nTime t1(10,20), t2(11,30);\\nt1.show();\\nt2.show();\\nt1=t1+ t2;\\n// operator + (t1, t2);\\nt1.show();\\nt2.show();\\n\n```\nWhat is a key advantage of using binary operator overloading with friend functions, as demonstrated in the code block below?\\n\\n```\\n#include<iostream>\\nusing namespace std;\\nclass Time\\n{\\nint hrs, mins;\\npublic:\\nTime (int h,int m)\\n{\thrs=h;mins=m;  }\\nvoid show()\\n{\tcout<<hrs<<\u201c:\u201d<<mins;  }\\nf friend Time operator + (Time t1,time t2);\\n};\\nTime operator + (time t1,time t2)\\n{\\nTime temp;\\ntemp.hrs=t1.hrs+t2.hrs;\\ntemp.mins=t1.mins+t2.mins;\\nreturn temp;\\n}\\nint main()\\n{\\nTime t1(10,20), t2(11,30);\\nt1.show();\\nt2.show();\\nt1=t1+ t2;\\n// operator + (t1, t2);\\nt1.show();\\nt2.show();\\n```\\n",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "What happens when no initialization of `Circle`'s data members is necessary, as shown in the following code:\n```\nclass Circle {\\n    public static void main(String[] args) {\\n        double radius = 1;\\n        System.out.println(\\\"The circle has a radius of \\\" + radius);\\n    }\\n}\\n\n```",
+      "score": 0.985,
+      "reward": 0.022900000000000007
+    },
+    {
+      "q": "Compare the design tradeoffs of default constructors and parameterized constructors for initializing objects in C++. How do their respective strengths and limitations impact the overall system design?",
+      "score": 0.945,
+      "reward": -0.0010153846153845957
+    },
+    {
+      "q": "What does the line `Time operator + (Time t) { ... }` indicate about the class member function?",
+      "score": 0.394,
+      "reward": -0.28125
+    },
+    {
+      "q": "What happens when you use a pointer to access a class member variable through an object, like `d.*pa` in the code?",
+      "score": 1.0,
+      "reward": 0.04116428571428565
+    },
+    {
+      "q": "When would using dynamic constructors with default arguments actually worsen program behavior when copying objects, and how does this relate to the concept of shallow copies versus deep copies in object-oriented programming?",
+      "score": 0.675,
+      "reward": -0.14853103448275867
+    },
+    {
+      "q": "How does using a pointer to access a class member variable through an object, like `d.*pa` in the code, enable you to manipulate data members of a class?",
+      "score": 0.938,
+      "reward": 0.00895999999999988
+    },
+    {
+      "q": "How do destructors handle objects with block scope, like demoObject in the provided code, when they go out of scope?",
+      "score": 1.0,
+      "reward": 0.044199999999999996
+    },
+    {
+      "q": "`However, what if you wish to use an operator to manipulate class objects? Operator Overloading - C++ allows you to redefine standard operators work when used with class objects  Using traditional operators with user-defined objects  A way of achieving static polymorphism is Operator overloading    Operator << is both the stream-insertion operator and the bitwise left-shift operator`  What is the primary purpose of operator overloading in C++?",
+      "score": 1.0,
+      "reward": 0.0732
+    },
+    {
+      "q": "When would using a binary operator overload with a member function be more suitable than using one with a friend function, and what key advantage does this approach provide?",
+      "score": 1.0,
+      "reward": 0.0
+    },
+    {
+      "q": "When would you prefer to use a constructor with default arguments over an overloaded constructor, considering the code below?\n```\n\\nclass sum\\n{\\nint x, y;\\npublic:\\nvoid print()\\n{\tcout<<\u201cx = \u201c<<x<<\u201cy =\u201c<<y;  }\\nsum(int i,int j=10);\\n};\\nsum::sum(int i,int j)\\n{\\nx=i;y=j;\\n}\\nvoid main()\\n{\\ns1(1),s2(8,9);\\ns1.print();\\ns2.print();\\n}\\n\n```",
+      "score": 0.895,
+      "reward": -0.028799999999999958
+    },
+    {
+      "q": "When deciding between using member functions and friend functions for operator overloading, which approach would you choose for a class that requires type conversion from an integer to the class object, and why? However, what if you wish to use an operator to manipulate class objects? Operator Overloading - C++ allows you to redefine standard operators work when used with class objects  Using traditional operators with user-defined objects  A way of achieving static polymorphism is Operator overloading    Operator << is both the stream-insertion operator and the bitwise left-shift operator",
+      "score": 0.522,
+      "reward": -0.19224
+    },
+    {
+      "q": "What happens when a local (automatic) object with block scope goes out of scope and has a constructor and destructor like Ceo, as shown in the following code:\n```\n\\n#include <iostream>\\nusing namespace std;\\nclass Ceo {\\npublic:\\n    Ceo() { // Constructor\\n        cout << \\\"Welcome to the constructor! \\\\n\\\";\\n    }\\n    ~Ceo() { // Destructor\\n        cout << \\\"The destructor is now running. \\\\n\\\";\\n    }\\n};\\nint main()\\n{\\n    Demo demoObject; // Define a demo object;\\n    cout << \\\"This program demonstrates an object\\\\n\\\";\\n    cout << \\\"which has a constructor and destructor.\\\\n\\\";\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.03315000000000001
+    },
+    {
+      "q": "`Leftmost operand must be of same class as operator function. Use this keyword to implicitly get left operand argument. Operators (), [], -> or any assignment operator must be overloaded as a class member function.   Overloading does not actually add any capabilities to C++. Everything you can do with an overloaded operator you can also do with a function.   However, overloaded operators make your programs easier to write, read, and maintain. -> | << [], -> or any assignment operator must be overloaded as a class member function. Called when   Left operand of binary operator is of this class   Single operand of unary operator is of this class Can have object of different class than operator   class Time   {   int hrs, mins;   public:   Time (int h,int m)   {\thrs=h;mins=m;  }   void show()   {\tcout<<hrs<<\u201c:\u201d<<mins;  }   void sum(Time t)   {\thrs+=t.hrs;  mins+=t.mins;   }   Time operator + (Time t)   {\tTime temp;   temp.hrs=hrs+t.hrs;   temp.mins=mins+t.mins;   return temp;   }   }; int main() { Time t1(10,20), t2(11,30); t1.show(); t2.show(); // t1.sum(t2); t1=t1+ t2; // t1.operator + (t2) t1.show(); t2.show(); } hrs 10: 20 mins hrs 11: 30 mins hrs 21: 50 mins hrs 11: 30 mins  What is the requirement for the leftmost operand when overloading an operator as a class member function?`,",
+      "score": 1.0,
+      "reward": 0.08596363636363633
+    },
+    {
+      "q": "How do destructors in C++ relate to operator overloading, and what happens when an object's constructor and destructor are both invoked?",
+      "score": 1.0,
+      "reward": 0.02652000000000001
+    },
+    {
+      "q": "How does the absence of a default constructor in a class affect the initialization of its data members when an object is created, and what role do constructors play in ensuring meaningful values for these members?",
+      "score": 0.894,
+      "reward": -0.027439999999999975
+    },
+    {
+      "q": "When would you choose to overload an operator as a class member function instead of using a friend function, and what are the implications for program behavior in each case?",
+      "score": 1.0,
+      "reward": 0.07879999999999998
+    },
+    {
+      "q": "What is a key difference between overloading binary operators as member functions versus as friend functions, as demonstrated in the provided code examples?",
+      "score": 0.0,
+      "reward": -0.44999999999999996
+    },
+    {
+      "q": "How does the copy constructor's role in making a deep copy of an object affect the allocation and deallocation of memory when using dynamic constructors?",
+      "score": 1.0,
+      "reward": 0.044670967741935394
+    },
+    {
+      "q": "A developer claims that using binary operator overloading with member functions provides better encapsulation than using friend functions. Evaluate this claim.",
+      "score": 0.801,
+      "reward": 0.024480000000000033
+    },
+    {
+      "q": "```\n{\n\"question\":\n```\nWhat is the output of `s1.print()` in this code?",
+      "score": 0.224,
+      "reward": -0.4026
+    },
+    {
+      "q": "```\nclass Point\n{\nint x,y;\nPoint () {};\nPoint (int, int);\nfriend Point operator +(int, Point);\nfriend Point operator +(Point, int);\n};\nPoint::Point (int a, int b)\n{  x = a;  y = b; }\nPoint operator+ (Point P, int i)\n{  \tPoint temp;\ntemp.x = P.x + i;\ntemp.y = P.y + i;\nreturn (temp);\n}\nPoint operator+ (int i, Point P)\n{  \tPoint temp;\ntemp.x = i + P.x;\ntemp.y = i + P.y;\nreturn (temp);\n}\nmain ()\n{  \tPoint a (3,1);\nPoint b (1,2);\nPoint c;\nc = a + 5;\ncout << c.x << \",\" << c.y;\nc=10+a;\ncout << c.x << \",\" << c.y;\n}\n\nWhat is the purpose of declaring `friend Point operator +(int, Point);` and `friend Point operator +(Point, int);` in the given code?,",
+      "score": 1.0,
+      "reward": 0.07273846153846154
+    },
+    {
+      "q": "What is the primary limitation of using a casting operator function when converting basic types to class types, and how does this compare to using conversion constructors?",
+      "score": 1.0,
+      "reward": 0.06754285714285713
+    },
+    {
+      "q": "How do the concepts of constructor functions and overloaded operators relate to each other in terms of type conversions?",
+      "score": 1.0,
+      "reward": 0.06303999999999998
+    },
+    {
+      "q": "When overloading an operator as a class member function, what must be true about the leftmost operand?",
+      "score": 1.0,
+      "reward": 0.059100000000000014
+    },
+    {
+      "q": "`However, what if you wish to use an operator to manipulate class objects? Operator Overloading - C++ allows you to redefine standard operators work when used with class objects   Using traditional operators with user-defined objects   A way of achieving static polymorphism is Operator overloading     Operator << is both the stream-insertion operator and the bitwise left-shift operator`  What is the main purpose of operator overloading in C++?",
+      "score": 1.0,
+      "reward": 0.05562352941176472
+    },
+    {
+      "q": "How do pointer-to-member operators work when used with objects, such as `dl.*pa` in the code?",
+      "score": 1.0,
+      "reward": 0.04327499999999993
+    },
+    {
+      "q": "How does the syntax for unary operator overloading as a member function, shown below, enable or constrain the implementation of such operators? \n\n```\n\\nreturnType classname :: Operator OperatorSymbol (argument list)\\n{\\n// Function body\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.11989999999999998
+    },
+    {
+      "q": "Compare the design tradeoffs of default constructors and parameterized constructors for initializing objects in C++. How do their respective strengths and limitations impact the overall system design, considering that a class may be defined without constructors. A constructor is called whenever an object is defined or dynamically allocated using the \u201cnew\u201d operator.",
+      "score": 0.805,
+      "reward": -0.05082352941176471
+    },
+    {
+      "q": "```\nclass Point\n{\npublic:\nint x,y;\nPoint () {};\nPoint (int,int);\nfriend ostream& operator<<(ostream&, const point&);\nfriend istream& operator>>(istream&, const point&);\n};\nPoint::Point (int a, int b)\n{  x = a;  y = b;}\nostream& operator<<(ostream& os, const Point& a)\n{    os << a.x;\nos << a.y;\nreturn os;  }\nistream& operator>>(istream& is, Point& a)\n{    is >> a.x;\nis >> a.y;\nreturn is;  }\nmain()\n{\nPoint p1(2,3), p2(0,0);\ncin>>p2;    // operator >>(cin, p2);  //cin.operator>>(p2)\ncout<<p1;  // operator <<(cout, p1);\ncout<<p2;\n}\nWhat is the purpose of returning `os` in the `operator<<(ostream& os, const Point& a)` function?\n```\n```\nclass Point\n{\npublic:\nint x,y;\nPoint () {};\nPoint (int,int);\nfriend ostream& operator<<(ostream&, const point&);\nfriend istream& operator>>(istream&, const point&);\n};\nPoint::Point (int a, int b)\n{  x = a;  y = b;}\nostream& operator<<(ostream& os, const Point& a)\n{    os << a.x;\nos << a.y;\nreturn os;  }\nistream& operator>>(istream& is, Point& a)\n{    is >> a.x;\nis >> a.y;\nreturn is;  }\nmain()\n{\nPoint p1(2,3), p2(0,0);\ncin>>p2;    // operator >>(cin, p2);  //cin.operator>>(p2)\ncout<<p1;  // operator <<(cout, p1);\ncout<<p2;\n}\nWhat is the purpose of returning `os` in the `operator<<(ostream& os, const Point& a)` function? ```,",
+      "score": 0.906,
+      "reward": -0.01272727272727281
+    },
+    {
+      "q": "How does overloading binary operators using friend functions enable you to manipulate data members of a class when constructing and destructing objects in object-oriented programming?",
+      "score": 1.0,
+      "reward": 0.04238823529411757
+    },
+    {
+      "q": "What happens if we do not define a constructor for the `Circle` class, as shown below?\n\n```public class Circle {\n    public static void main(String[] args) {\n        double radius = 1;\n        System.out.println(\"The circle has a radius of \" + radius);\n    }\n}\n```",
+      "score": 0.937,
+      "reward": 0.02679999999999998
+    },
+    {
+      "q": "When would using pointer-to-member operators, like `d.*pa` or `(dl.*pprint)()`, to access class member functions through an object actually worsen program behavior?",
+      "score": 0.708,
+      "reward": -0.12901714285714294
+    },
+    {
+      "q": "A developer claims that using dynamic constructors with default arguments makes copy constructors unnecessary \u2014 evaluate this claim.",
+      "score": 0.773,
+      "reward": -0.08751666666666673
+    },
+    {
+      "q": "When would you prefer using a binary operator overload as a member function over using one with a friend function, and what key advantage does this approach provide?",
+      "score": 1.0,
+      "reward": 0.10277142857142856
+    },
+    {
+      "q": "How do the concepts of unary operator overloading and assignment operator overloading relate to each other in terms of enabling or constraining the implementation of user-defined types?",
+      "score": 1.0,
+      "reward": 0.08992499999999999
+    },
+    {
+      "q": "When would you prefer to overload a binary operator as a member function versus defining it as a friend function, and what are the key considerations for making this decision?",
+      "score": 0.648,
+      "reward": -0.14693333333333328
+    },
+    {
+      "q": "How does the concept of operator overloading enable static polymorphism when using traditional operators with user-defined objects, as shown in the following code:\n```\n\\nHowever, what if you wish to use an operator to manipulate class objects?\\nOperator Overloading - C++ allows you to redefine standard operators work when used with class objects\\n  Using traditional operators with user-defined objects\\n  A way of achieving static polymorphism is Operator overloading\\n    Operator << is both the stream-insertion operator and the bitwise left-shift operator\\n\n```",
+      "score": 0.844,
+      "reward": -0.02778947368421052
+    },
+    {
+      "q": "When would you prefer using a member function for unary operator overloading instead of a friend function, and what key advantage does this approach provide?",
+      "score": 0.992,
+      "reward": 0.07566666666666663
+    },
+    {
+      "q": "When would using a casting operator function to convert a class type data to a basic type actually worsen program behavior, considering that it does not support type conversion from a class type to a basic type and must be written in the source object class?",
+      "score": 1.0,
+      "reward": 0.06252000000000003
+    },
+    {
+      "q": "When converting a class type to a basic type, which approach would you choose: using an overloaded casting operator or writing a constructor function? Justify your answer by referencing both Concept A and Concept B.",
+      "score": 0.808,
+      "reward": -0.06471891891891894
+    },
+    {
+      "q": "What is the most significant limitation of shallow copy that deep copy addresses?",
+      "score": 1.0,
+      "reward": 0.12915263157894735
+    },
+    {
+      "q": "How does the absence of a default constructor in a class affect the initialization of its data members when an object is created, and what role do constructors play in ensuring meaningful values for these members?",
+      "score": 0.873,
+      "reward": 0.06901052631578942
+    },
+    {
+      "q": "When choosing between using a member function or a friend function to overload a binary operator, which would you prefer for a complex calculation and why? The code below demonstrates the syntax for both approaches.\\`\\`\\` returnType classname :: Operator OperatorSymbol (argument list) { } Write function definition as normal Function name is keyword operator followed by the symbol for the operator being overloaded Example : operator + used to overload the addition operator (+) Using Member function (a non-static member function) Using Friend function     Unary operator \u2013 1     Binary operator \u2013 2 {\\}\\`\\`,",
+      "score": 1.0,
+      "reward": 0.15241999999999994
+    },
+    {
+      "q": "When designing a constructor with default arguments, which approach would you choose: using an initialization list or assigning values directly within the constructor body? Justify your answer considering the tradeoffs between these two approaches.",
+      "score": 1.0,
+      "reward": 0.14194999999999997
+    },
+    {
+      "q": "What happens when you add two Time objects using the overloaded + operator in the context of binary operator overloading as a friend function, and how does this differ from adding them using the same operator as a member function?",
+      "score": 1.0,
+      "reward": 0.1458363636363636
+    },
+    {
+      "q": "When would defining a default constructor for a class actually worsen program behavior, and how does this relate to the concept of implicit default constructors?",
+      "score": 0.753,
+      "reward": -0.0021428571428571824
+    },
+    {
+      "q": "What happens when you overload the function call operator ( ) to enable method invocation on objects of a given type, and how does this relate to the concept of operator overloading in terms of modifying the interpretation of operators?",
+      "score": 1.0,
+      "reward": 0.14034999999999995
+    },
+    {
+      "q": "How do the rules for creating new overloaded operators affect the implementation of a binary operator as a friend function, and what specific constraint does this impose on the programmer?",
+      "score": 0.963,
+      "reward": 0.11521538461538455
+    },
+    {
+      "q": "`Object + 100\t// object. Operator+(100)\n    100 + object  // In this case, it is integer that appears on the left\n    //100.operator+(object)     //invalid\n    //operator + (object, 100)\n    // operator + (100, object)\n\nWhat is the reason why the code `Object + 100` and `100 + object` behave differently?`,",
+      "score": 1.0,
+      "reward": 0.1395428571428572
+    },
+    {
+      "q": "How does using a pointer to a class member enable you to access data members through an object when constructing and destructing objects in object-oriented programming, as shown in the code blocks above?",
+      "score": 0.854,
+      "reward": -0.0374615384615385
+    },
+    {
+      "q": "```\n#include<iostream>\nusing namespace std;\nclass NUM\n{     private:  int n;\npublic:\nvoid getNum(int x)\n{ n=x;  }\nvoid dispNum( )\n{ cout << \"value of n is: \" << n; }\nfriend void operator - (NUM n1) ;\n};\nvoid operator - (NUM n1) ;\n{ n1.n = - n1.n; }\nint main()\n{\nNUM num;\nnum.getNum(10);\n-num;   //operator-(num)\nnum.dispNum();\ncout << endl;\n}\n```\nWhat is the purpose of the friend function `operator -` in this code, and how does it affect the behavior of the unary minus operator when applied to an object of class NUM?",
+      "score": 0.0,
+      "reward": -0.5038285714285714
+    },
+    {
+      "q": "```\n`std::ostream& operator<<(std::ostream& osObject, const className& cObject) {\n    // Output the members of cObject\n    osObject << cObject;\n\n    return osObject;\n}\n```\n````std::ostream& operator<<(std::ostream& osObject, const className& cObject) {\n    // Output the members of cObject\n    osObject << cObject;\n\n    return osObject;\n}\n``` What is the purpose of making `osObject` a reference to an ostream object in this overloaded operator<< function?```,",
+      "score": 0.957,
+      "reward": 0.023729999999999918
+    },
+    {
+      "q": "How does using a pointer to a class member enable you to access data members through an object when constructing and destructing objects in object-oriented programming, as shown in the following code blocks?\n```\n\\nint main() {\\n    simple obj;\\n    simple* ptr = &obj;\\n    cout << obj.ar;\\n    cout << ptr->ar;\\n}\\n\\n#include <iostream>\\n\\nclass Data {\\npublic:\\n    int a;\\n};\\n\\nint main() {\\n    Data d;\\n    d.a = 15;\\n    std::cout << d.*(&Data::a) << std::endl;\\n    return 0;\\n}\\n\\nint Data::*pa = &Data::a;\\nint main() {\\n    Data dl, d2;\\n    dl.a = 10;\\n    d2.a = 20;\\n    cout << (dl.*pa) << \\\"\\\\t\\\" << (d2.*pa);\\n    return 0;\\n}\\n\n```",
+      "score": 0.95,
+      "reward": 0.09905365853658525
+    },
+    {
+      "q": "What happens when an object of its associated class is created in relation to a constructor?",
+      "score": 0.0,
+      "reward": -0.42967272727272726
+    },
+    {
+      "q": "How does the casting operator function, as shown in the following code:\n```\n\\nIt must be a class member\\n  It must not specify a return type\\n  It must not have any arguments\\nThis overloaded typecast operator function does not have any return type(not even void)\\nA constructor function do not support type conversion from a class type to a basic type\\nAn overloaded casting operator is used to convert a class type data to a basic type. It should be written in the source object class\\nThis function converts a class type data to typename\\n  Converts the class object of which it is a member to typename.\\n  Converts the class object of which it is a member to typename. The typename may be a built-in type or a user-defined one.\\noperator typename {\\n    return;\\n}\\nClass Meter {\\nprivate :\\nfloat length;\\nMeter()\\n{   length = 0.0;  }\\n// Conversion from basic to user-defined\\nMeter (float intlength)  // conversion constructor\\n{  length = intlength /100.0; }\\n// Conversion from user-defined to basic\\noperator float() // overloaded casting operator\\n{  float lengthcms;\\nlengthcms = length * 100.0;\\nreturn (lengthcms);  }\\nvoid Getlength()\\n{ cin>>length; }\\nvoid Showlength()\\n{  cout << \u201clength in Meter\u201d<<length;  }\\n};\\nmain() {\\nMeter M1;\\nfloat length1;\\ncin>>length1;\\nM1=length1; //basic to class type\\nM1.Showlength();\\nMeter M2;\\nfloat length2;\\nM2.Getlength();\\nlength2=M2; //class type to basic\\n cout<<length2;\\n}\\n\n```\nrequire the casting operator function to convert a Meter object to a float value, and what happens when this conversion is performed?",
+      "score": 1.0,
+      "reward": 0.13683636363636373
+    },
+    {
+      "q": "What type of constructor should be written in the destination object class to perform implicit class-type conversions when converting a basic type to a user-defined data type?",
+      "score": 0.31,
+      "reward": -0.35625714285714294
+    },
+    {
+      "q": "How does operator overloading enable you to access and manipulate class members when constructing and destructing objects, considering the role of constructors and destructors?",
+      "score": 1.0,
+      "reward": 0.056399999999999915
+    },
+    {
+      "q": "A developer argues that overloading the unary minus operator as a friend function makes it unnecessary to provide a member function implementation for the same operator. Evaluate this claim, considering the code below:\\`\\`\\`class Point {\u00a0  \tint x, y;  public:  Point() {x = y = 0; }  Point & operator++() {\tx++;  y++;  return *this;\t}  friend point operator -- (point); };  Point operator -- (point &p) {\tp.x--;  p.y--;  return p; } main() {Point p, p1,p2; p1= p++; p2= --p;} \\`\\`\\`",
+      "score": 0.988,
+      "reward": 0.08303999999999997
+    },
+    {
+      "q": "A developer argues that parameterized constructors make default constructors unnecessary \u2014 evaluate this claim.",
+      "score": 0.803,
+      "reward": -0.026660869565217425
+    },
+    {
+      "q": "What happens when using a pointer to a class member to access data members through an object enables you to dynamically bind methods to objects in object-oriented programming?",
+      "score": 0.873,
+      "reward": 0.06064999999999994
+    },
+    {
+      "q": "How does using pointers to class members enable operator overloading to access and manipulate data members when constructing and destructing objects, considering the role of constructors and destructors?",
+      "score": 1.0,
+      "reward": 0.13558666666666658
+    },
+    {
+      "q": "What happens when an object of its associated class is destroyed, and how does it relate to destructors?",
+      "score": 1.0,
+      "reward": 0.16772499999999996
+    },
+    {
+      "q": "How does the requirement that `[]`, `->`, or any assignment operator must be overloaded as a class member function affect the behavior of the `operator +` function in the given code, and what implications does this have for the flexibility of operator overloading?",
+      "score": 1.0,
+      "reward": 0.13436521739130447
+    },
+    {
+      "q": "What is the most significant limitation of using friend functions to overload operators when compared to member function overloading, as shown in the following code:\n```\n\\n#include <stdio.h>\\nint main() {\\n float a;\\na = 10;\\nfloat b = 10.54f; // explicit conversion to float\\na = b;\\nreturn 0;\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.13210000000000013
+    },
+    {
+      "q": "When creating new overloaded operators, what are the rules that programmers cannot change?",
+      "score": 1.0,
+      "reward": 0.16460000000000002
+    },
+    {
+      "q": "```\n\\nLeftmost operand must be of same class as operator function. Use this keyword to implicitly get left operand argument. Operators (), [], -> or any assignment operator must be overloaded as a class member function.\\n  Overloading does not actually add any capabilities to C++. Everything you can do with an overloaded operator you can also do with a function.\\n  However, overloaded operators make your programs easier to write, read, and maintain.\\n-> | <<\\n[], -> or any assignment operator must be overloaded as a class member function. Called when\\n  Left operand of binary operator is of this class\\n  Single operand of unary operator is of this class\\nCan have object of different class than operator\\n\n```\nWhen overloading operators as class member functions, which approach would you choose: using this keyword to implicitly get the left operand argument or providing explicit arguments for both operands? Consider the code block below:\\n```\\nLeftmost operand must be of same class as operator function. Use this keyword to implicitly get left operand argument. Operators (), [], -> or any assignment operator must be overloaded as a class member function.\\n  Overloading does not actually add any capabilities to C++. Everything you can do with an overloaded operator you can also do with a function.\\n  However, overloaded operators make your programs easier to write, read, and maintain.\\n-> | <<\\n[], -> or any assignment operator must be overloaded as a class member function. Called when\\n  Left operand of binary operator is of this class\\n  Single operand of unary operator is of this class\\nCan have object of different class than operator\\n```\\n```\nclass Time\n{\nint hrs, mins;\npublic:\nTime (int h,int m)\n{\thrs=h;mins=m;  }\nvoid show()\n{\tcout<<hrs<<\u201c:\u201d<<mins;  }\nvoid sum(Time t)\n{\thrs+=t.hrs;  mins+=t.mins;\n}\nTime operator + (Time t)\n{\tTime temp;\ntemp.hrs=hrs+t.hrs;\ntemp.mins=mins+t.mins;\nreturn temp;\n}\n};\nint main()\n{\nTime t1(10,20), t2(11,30);\nt1.show();\nt2.show();\n// t1.sum(t2);\nt1=t1+ t2;\nt1.show();\nt2.show();\n}",
+      "score": 0.773,
+      "reward": -0.0007359999999998756
+    },
+    {
+      "q": "What happens when a constructor is invoked implicitly versus explicitly in relation to the creation of an object?",
+      "score": 0.896,
+      "reward": 0.104312
+    },
+    {
+      "q": "What happens when a program ends and global or static objects exist, requiring destructors to be called?",
+      "score": 1.0,
+      "reward": 0.10210000000000002
+    },
+    {
+      "q": "What happens when you overload a binary operator as a member function to enable addition of class objects, and how does this relate to the concept of operator overloading in terms of modifying the interpretation of operators?",
+      "score": 1.0,
+      "reward": 0.15962352941176472
+    },
+    {
+      "q": "What happens when using a pointer to a class member enables you to dynamically bind methods to objects in object-oriented programming, as shown in the following code block?\n```\n\\nint main() {\\n    simple obj;\\n    simple* ptr = &obj;\\n    cout << obj.ar;\\n    cout << ptr->ar;\\n}\\n\n```",
+      "score": 0.995,
+      "reward": 0.13144347826086947
+    },
+    {
+      "q": "What is the difference between a unary operator and a binary operator in the context of operator overloading?",
+      "score": 1.0,
+      "reward": 0.15520000000000006
+    },
+    {
+      "q": "When would using default arguments in constructors actually worsen program behavior, and how does this relate to the concept that constructors cannot return values?",
+      "score": 1.0,
+      "reward": 0.1633769230769231
+    },
+    {
+      "q": "What is the most significant limitation of providing a default constructor for a class when compared to defining a parameterized constructor, and how does this limitation impact the initialization of data members?",
+      "score": 1.0,
+      "reward": 0.1602888888888889
+    },
+    {
+      "q": "What is the reason why the code `Unary operator \u2013 1\n    Binary operator \u2013 2\n{\n}\n` behaves differently for unary and binary operators?",
+      "score": 0.854,
+      "reward": 0.049100000000000074
+    },
+    {
+      "q": "When converting a Meter object to a float value using the casting operator function, what happens when this conversion is performed? Consider the code block below:\n```Class Meter {\nprivate :\nfloat length;\nMeter()\n{   length = 0.0;  }\n// Conversion from basic to user-defined\nMeter (float intlength)  // conversion constructor\n{  length = intlength /100.0; }\n// Conversion from user-defined to basic\noperator float() // overloaded casting operator\n{  float lengthcms;\nlengthcms = length * 100.0;\nreturn (lengthcms);  }\nvoid Getlength()\n{ cin>>length; }\nvoid Showlength()\n{  cout << \u201clength in Meter\u201d<<length;  }\n};\nmain() {\nMeter M1;\nfloat length1;\ncin>>length1;\nM1=length1; //basic to class type\nM1.Showlength();\nMeter M2;\nfloat length2;\nM2.Getlength();\nlength2=M2; //class type to basic\n cout<<length2;\n}\n```",
+      "score": 1.0,
+      "reward": 0.13460000000000005
+    },
+    {
+      "q": "What must be returned by the function to overload the operator << in order to output the value of an object?",
+      "score": 1.0,
+      "reward": 0.13328510638297866
+    },
+    {
+      "q": "When choosing between constructors and destructors for managing memory in a class, which would you prioritize and why?",
+      "score": 1.0,
+      "reward": 0.09894285714285715
+    },
+    {
+      "q": "What is the most significant limitation of overloading the << operator as a friend function that overloading it as a member function does not address, considering the code below:\\`\\`\\`friend ostream & operator << ( ostream &out, arg) {\t //display attributes  return out; } \\`\\`\\\\",
+      "score": 0.809,
+      "reward": 0.04267368421052637
+    },
+    {
+      "q": "What happens when you overload the () operator in a class, and how does this affect the flexibility of operator overloading? Consider the code block below:\n```\n\\n#include <stdio.h>\\nint main() {\\n float a;\\na = 10;\\nfloat b = 10.54f; // explicit conversion to float\\na = b;\\nreturn 0;\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.13265000000000007
+    },
+    {
+      "q": "When overloading operators as class member functions, which approach would you choose: using this keyword to implicitly get the left operand argument or providing explicit arguments for both operands? Consider the relationship between operator overloading and function arguments.",
+      "score": 0.531,
+      "reward": -0.14086206896551717
+    },
+    {
+      "q": "When overloading operators as class member functions, what approach would you choose: using this keyword to implicitly get the left operand argument or providing explicit arguments for both operands?",
+      "score": 0.964,
+      "reward": 0.11764000000000005
+    },
+    {
+      "q": "How do constructors with parameters enable the creation of objects with different sets of data values in a class, and what happens when an object is created without providing any arguments to its constructor?",
+      "score": 1.0,
+      "reward": 0.15742142857142855
+    },
+    {
+      "q": "A developer argues that overloading operator functions as class members makes non-member friend functions unnecessary \u2014 evaluate this claim.",
+      "score": 0.993,
+      "reward": 0.13326451612903234
+    },
+    {
+      "q": "What are the rules when creating new overloaded operators in C++?",
+      "score": 1.0,
+      "reward": 0.09657500000000001
+    },
+    {
+      "q": "What is the name of the member function that is automatically called when an object is destroyed?",
+      "score": 0.816,
+      "reward": -0.0034000000000000002
+    },
+    {
+      "q": "When converting from a basic type to a user-defined type, would you prefer using a single-argument conversion constructor or an overloaded casting operator? Justify your answer.",
+      "score": 0.931,
+      "reward": 0.0955625000000001
+    },
+    {
+      "q": "What would happen if we were to create a new object of the Circle class without passing any arguments to its constructor, as shown in the code snippet above? Would it still be possible to access and use the object's properties and methods?",
+      "score": 0.886,
+      "reward": 0.08871034482758619
+    },
+    {
+      "q": "What is a characteristic of destructors in C++?",
+      "score": 1.0,
+      "reward": 0.10429999999999999
+    },
+    {
+      "q": "How do the rules for overloading I/O stream operators as member or friend functions relate to the number of arguments an operator function can take, and what happens when a binary operator is overloaded with two reference parameters?",
+      "score": 0.945,
+      "reward": 0.12205999999999997
+    },
+    {
+      "q": "What is a constructor in Object Oriented Programming?",
+      "score": 0.828,
+      "reward": 0.03112499999999989
+    },
+    {
+      "q": "```\nObject + 100\t// object. Operator+(100)\n    100 + object  // In this case, it is integer that appears on the left\n    //100.operator+(object)     //invalid\n    //operator + (object, 100)\n    // operator + (100, object)\n\nWhat is the reason for the invalidity of `100.operator+(object)` in the given code snippet?\n```\n```\nObject + 100\t// object. Operator+(100)\n    100 + object  // In this case, it is integer that appears on the left\n    //100.operator+(object)     //invalid\n    //operator + (object, 100)\n    // operator + (100, object)\n\nWhat is the reason for the invalidity of `100.operator+(object)` in the given code snippet?```\n\n\n{",
+      "score": 0.891,
+      "reward": 0.07181818181818186
+    },
+    {
+      "q": "How does the copy constructor enable dynamic memory allocation for objects with varying data member sizes, and what role do constructors and destructors play in this process?",
+      "score": 0.637,
+      "reward": -0.1601387755102042
+    },
+    {
+      "q": "When creating new overloaded operators, programmers cannot change the meaning of an intrinsic or built-in operator. What does this rule imply about overloading the equality operator (==) for a class object?",
+      "score": 0.931,
+      "reward": 0.034519999999999995
+    },
+    {
+      "q": "What is the most significant limitation of using destructors to manage memory, and how does this compare to constructors?",
+      "score": 0.808,
+      "reward": -0.08263636363636362
+    },
+    {
+      "q": "When would you prefer to use a parameterized constructor over a default constructor in a class, and what are the implications of this choice on the initialization of data members?",
+      "score": 1.0,
+      "reward": 0.07347096774193541
+    },
+    {
+      "q": "```\n`\nclass Time\n  {\n  int hrs, mins;\n  public:\n  Time (int h,int m)\n  {\thrs=h;mins=m;  }\n  void show()\n  {\tcout<<hrs<<\u201c:\u201d<<mins;  }\n  void sum(Time t)\n  {\thrs+=t.hrs;  mins+=t.mins;\n  }\n  Time operator + (Time t)\n  {\tTime temp;\n  temp.hrs=hrs+t.hrs;\n  temp.mins=mins+t.mins;\n  return temp;\n  }\n  };\nint main()\n{\nTime t1(10,20), t2(11,30);\nt1.show();\nt2.show();\n// t1.sum(t2);\nt1=t1+ t2;\nt1.show();\nt2.show();\n}\nwhy does the leftmost operand of the operator function in the Time class need to be of the same class as the operator function?\n```\n````\nclass Time\n  {\n  int hrs, mins;\n  public:\n  Time (int h,int m)\n  {\thrs=h;mins=m;  }\n  void show()\n  {\tcout<<hrs<<\u201c:\u201d<<mins;  }\n  void sum(Time t)\n  {\thrs+=t.hrs;  mins+=t.mins;\n  }\n  Time operator + (Time t)\n  {\tTime temp;\n  temp.hrs=hrs+t.hrs;\n  temp.mins=mins+t.mins;\n  return temp;\n  }\n  };\nint main()\n{\nTime t1(10,20), t2(11,30);\nt1.show();\nt2.show();\n// t1.sum(t2);\nt1=t1+ t2;\nt1.show();\nt2.show();\n}\nwhy does the leftmost operand of the operator function in the Time class need to be of the same class as the operator function?\n```\n,",
+      "score": 0.731,
+      "reward": -0.10111764705882349
+    },
+    {
+      "q": "What happens when an object of the Circle class is created without providing any arguments to its constructor, and how does this affect the initialization of the radius data member?",
+      "score": 1.0,
+      "reward": 0.07117499999999992
+    },
+    {
+      "q": "What is the purpose of the `const` keyword in the function definition `std::ostream& operator<<(std::ostream& osObject, const className& cObject) { ... }`?",
+      "score": 0.798,
+      "reward": 0.01773199999999995
+    },
+    {
+      "q": "How does using a pointer to a class member enable you to dynamically bind methods to objects in object-oriented programming, as shown in the following code block?\n```\n\\nint main() {\\n    simple obj;\\n    simple* ptr = &obj;\\n    cout << obj.ar;\\n    cout << ptr->ar;\\n}\\n\\n#include <iostream>\\n\\nclass Data {\\npublic:\\n    int a;\\n};\\n\\nint main() {\\n    Data d;\\n    d.a = 15;\\n    std::cout << d.*(&Data::a) << std::endl;\\n    return 0;\\n}\\n\\nint Data::*pa = &Data::a;\\nint main() {\\n    Data dl, d2;\\n    dl.a = 10;\\n    d2.a = 20;\\n    cout << (dl.*pa) << \\\"\\\\t\\\" << (d2.*pa);\\n    return 0;\\n}\\n\n```",
+      "score": 0.745,
+      "reward": -0.012223529411764814
+    },
+    {
+      "q": "What does the `operator typename { return; }` code block do?",
+      "score": 1.0,
+      "reward": 0.13856000000000007
+    },
+    {
+      "q": "What happens when the object `s2` is created without providing any arguments to its constructor?",
+      "score": 0.095,
+      "reward": -0.3775272727272728
+    },
+    {
+      "q": "`public class Circle {     public static void main(String[] args) {         double radius = 1;         System.out.println(",
+      "score": 0.594,
+      "reward": -0.07347647058823543
+    },
+    {
+      "q": "Compare the design tradeoffs of default constructors and parameterized constructors for a real system, considering the implications on data member initialization.",
+      "score": 1.0,
+      "reward": 0.16754857142857132
+    },
+    {
+      "q": "How does the friend operator function in the Point class enable commutative behavior for the overloaded + operator?",
+      "score": 1.0,
+      "reward": 0.1369333333333334
+    },
+    {
+      "q": "What are three peculiarities of constructors in C++?",
+      "score": 0.896,
+      "reward": 0.1044499999999999
+    },
+    {
+      "q": "When creating new overloaded operators, programmers cannot change the meaning of which type of operator?",
+      "score": 0.903,
+      "reward": 0.09605714285714285
+    },
+    {
+      "q": "When would using overloaded I/O stream operators to convert a class type to a basic type actually worsen program behavior, and how does this relate to the use of casting operators in such conversions?",
+      "score": 1.0,
+      "reward": 0.05960769230769218
+    },
+    {
+      "q": "How do constructors with default arguments enable dynamic memory allocation for objects with varying data member sizes, and what role do destructors play in this process when using new operator in the constructor? \n\n```\n\\nclass sum  {\\n int x, y;\\n public:\\n void print()\\n { cout<<\u201cx = \u201c<<x<<\u201cy =\u201c<<y; }\\n sum(int i, int j=10);\\n};\\nsum::sum(int i,int j)\\n { x=i;y=j; }\\nvoid main()\\n {\\n sum s1(1),s2(8,9);\\n s1.print();\\n s2.print();\\n}\\nsum( ) {x=10;y=20;};\\nsum (int i, int j) {x=i; y=j;};\\n#include<string.h>\\nclass String {\\n char* data;\\n public:\\n String(const char* s = \"\")\\n {\\n data = new char[strlen(s) +1];\\n strcpy(data,s);\\n }\\n ~String( ) \\n {\\n delete [ ] data;    }\\n void display()\\n { cout << data;\t     }\\n};\\nmain()\\n {\\n String s = \"hello\";\\n cout <<\u201ds=\u201d;\\n s.display( );\\n String s1(\u201chello world\u201d);\\n cout<<\u201ds1= \u201d;\\n s1.display();\\n}\\n\n```",
+      "score": 0.752,
+      "reward": -0.08750943396226427
+    },
+    {
+      "q": "How does the absence of an explicit constructor affect the initialization of data members when creating objects of a class, and what role do default constructors play in this process?",
+      "score": 0.895,
+      "reward": 0.023205405405405322
+    },
+    {
+      "q": "When would using member functions for assignment operator overloading actually worsen program behavior, and how does this relate to the limitations of friend functions in terms of accessing private data members?",
+      "score": 1.0,
+      "reward": 0.07088181818181816
+    },
+    {
+      "q": "What happens to a constructor when an object of its associated class is created?",
+      "score": 0.951,
+      "reward": 0.055310526315789386
+    },
+    {
+      "q": "```\nclass TComplex {\npublic:\n    float real;\n    float img;\n\n    // Member functions\n    TComplex operator-(const TComplex& z) {\n        TComplex result;\n        result.real = this->real - z.real;\n        result.img = this->img - z.img;\n        return result;\n    }\n};\n```\nWhat is the purpose of the `this->` keyword in the `operator-` function?",
+      "score": 0.0,
+      "reward": -0.5283891891891891
+    },
+    {
+      "q": "How does the concept of constructors, particularly default constructors, enable or constrain the overloading of operators in object-oriented programming?",
+      "score": 1.0,
+      "reward": 0.08253846153846146
+    },
+    {
+      "q": "When designing a class with both default and parameterized constructors, which approach would you recommend for initializing data members, and why?",
+      "score": 1.0,
+      "reward": 0.08047499999999996
+    },
+    {
+      "q": "How do the rules for operator overloading regarding the number of arguments affect the syntax of a unary operator function as a friend function, and what happens when this function is used in conjunction with the existing code that demonstrates the difference between prefix and postfix increment operators?",
+      "score": 0.805,
+      "reward": -0.04411304347826088
+    },
+    {
+      "q": "What happens when you use a pointer to a class member to access and modify data members of an object, as shown in the following code block?\n\n```\n\\nint main() {\\n    simple obj;\\n    simple* ptr = &obj;\\n    cout << obj.ar;\\n    cout << ptr->ar;\\n}\\n\\n#include <iostream>\\n\\nclass Data {\\npublic:\\n    int a;\\n};\\n\\nint main() {\\n    Data d;\\n    d.a = 15;\\n    std::cout << d.*(&Data::a) << std::endl;\\n    return 0;\\n}\\n\\nint Data::*pa = &Data::a;\\nint main() {\\n    Data dl, d2;\\n    dl.a = 10;\\n    d2.a = 20;\\n    cout << (dl.*pa) << \\\"\\\\t\\\" << (d2.*pa);\\n    return 0;\\n}\\n\n```",
+      "score": 0.873,
+      "reward": -0.014633333333333476
+    },
+    {
+      "q": "How do the rules for declaring destructors affect the syntax of friend functions used for operator overloading?",
+      "score": 1.0,
+      "reward": 0.029849999999999974
+    },
+    {
+      "q": "What is the most significant limitation of using a casting operator to convert a class type to a basic type, and how does this relate to the use of conversion constructors in such conversions?",
+      "score": 1.0,
+      "reward": 0.06044727272727261
+    },
+    {
+      "q": "What is the purpose of overloading binary operators in object-oriented programming?",
+      "score": 1.0,
+      "reward": 0.13936785714285704
+    },
+    {
+      "q": "How does the syntax for overloading a binary operator as a member function, such as `returnType classname :: Operator OperatorSymbol (argument list)`, relate to the rules for creating new overloaded operators, considering that programmers cannot change the meaning of an intrinsic or built-in operator?",
+      "score": 0.954,
+      "reward": 0.12339999999999995
+    },
+    {
+      "q": "When designing classes with multiple constructors, should you prioritize constructor overloading or constructor initialization lists? Consider the trade-offs between flexibility and readability.",
+      "score": 1.0,
+      "reward": 0.15851219512195114
+    },
+    {
+      "q": "What happens when an object of class `Circle` is created without passing any arguments to its constructor, as shown in the following code block?\n\n```\n#include <iostream>\nusing namespace std;\nclass Circle {\npublic:\n    double radius;\n    Circle(double newRadius) : radius(newRadius) {}\n    double getArea() {\n        return M_PI * radius * radius;\n    }\n};\nint main() {\n    Circle circle1(1.0);\n    Circle circle2(); // What happens here?\n    Circle circle3(15);\n\n    cout << \"The area of the circle of radius \" << circle1.radius << \" is \" << circle1.getArea() << endl;\n    cout << \"The area of the circle of radius \" << circle2.radius << \" is \" << circle2.getArea() << endl;\n    cout << \"The area of the circle of radius \" << circle3.radius << \" is \" << circle3.getArea() << endl;\n\n    circle1.radius = 7.0;\n    cout << \"The area of the circle of radius \" << circle1.radius << \" is \" << circle1.getArea() << endl;\n    return 0;\n}\n```",
+      "score": 0.985,
+      "reward": 0.1478571428571428
+    },
+    {
+      "q": "What happens when a destructor is called in a class that has both static and non-static member objects, given that destructors for nonstatic member objects are called in the reverse order they appear in the class declaration?",
+      "score": 1.0,
+      "reward": 0.10755384615384611
+    },
+    {
+      "q": "What are three peculiarities of constructors?",
+      "score": 1.0,
+      "reward": 0.15506976744186046
+    },
+    {
+      "q": "When designing a custom assignment operator for a user-defined class, which approach would you choose: using a member function to overload the `=` operator, or defining it as a friend function? Justify your answer considering the implications of each option on accessing private data members and the overall program behavior.",
+      "score": 0.929,
+      "reward": 0.10726400000000003
+    },
+    {
+      "q": "When would using a casting operator function to convert a class type data to a basic type actually worsen program behavior, and how does this relate to the distinction between member and non-member operator functions?",
+      "score": 1.0,
+      "reward": 0.1497263157894737
+    },
+    {
+      "q": "What is the most significant limitation of using a constructor to convert a basic type to a class type, and how does this relate to the use of casting operators in such conversions?",
+      "score": 1.0,
+      "reward": 0.13832631578947358
+    },
+    {
+      "q": "```\nclass Point\n{   int x, y;\nPoint() {x = y = 0; }\nPoint & operator++()\n{   x++;\ny++;\nreturn *this;\t}\nfriend point operator -- (point);\n};\nPoint operator -- (point &p)\n{   p.x--;\np.y--;\nreturn p;\n}\nmain()\n{\nPoint p, p1,p2;\np1= p++;\np2= --p;\n}\n\nWhat is the purpose of the friend function `operator--(point)` in this code?\n```\n```\nclass Point\n{   int x, y;\nPoint() {x = y = 0; }\nPoint & operator++()\n{   x++;\ny++;\nreturn *this;\t}\nfriend point operator -- (point);\n};\nPoint operator -- (point &p)\n{   p.x--;\np.y--;\nreturn p;\n}\nmain()\n{\nPoint p, p1,p2;\np1= p++;\np2= --p;\n}\n\nWhat is the purpose of the friend function `operator--(point)` in this code? ```,",
+      "score": 1.0,
+      "reward": 0.14717692307692307
+    },
+    {
+      "q": "How do the friend operator functions in the existing content enable flexibility for the overloaded + operator, and what implications does this have on the type conversion mechanism demonstrated in the new code block?",
+      "score": 0.597,
+      "reward": -0.08766153846153842
+    },
+    {
+      "q": "How does the concept of default constructors enable or constrain the overloading of operators in object-oriented programming, particularly when defining a class with both default and parameterized constructors?",
+      "score": 1.0,
+      "reward": 0.1533636363636363
+    },
+    {
+      "q": "A developer claims that using member functions for operator overloading makes it unnecessary to use friend functions. Evaluate this claim.",
+      "score": 0.977,
+      "reward": 0.13140000000000002
+    },
+    {
+      "q": "What is the difference between a unary and binary operator in the context of operator overloading?",
+      "score": 1.0,
+      "reward": 0.14287142857142854
+    },
+    {
+      "q": "When designing an object-oriented program that involves both pointers to class members and overloading I/O stream operators, under what conditions would you prefer using a pointer to access and modify data members of an object over overloading the operator?",
+      "score": 1.0,
+      "reward": 0.1373206896551723
+    },
+    {
+      "q": "What happens when an object of class Ceo is created without passing any arguments to its constructor, given that it has a default constructor with initialization?",
+      "score": 0.909,
+      "reward": 0.09834666666666662
+    },
+    {
+      "q": "What does the line `Leftmost operand must be of same class as operator function. Use this keyword to implicitly get left operand argument. Operators (), [], -> or any assignment operator must be overloaded as a class member function.` indicate about overloading operators?",
+      "score": 0.898,
+      "reward": 0.0816137931034483
+    },
+    {
+      "q": "Under what conditions would you prefer to overload a binary operator as a class member function over using a friend function, and how does this relate to the requirement that the leftmost operand must be of the same class as the operator function?",
+      "score": 0.864,
+      "reward": 0.07272500000000004
+    },
+    {
+      "q": "What is the most significant limitation of using friend functions for operator overloading that member functions do not address, considering the implications on accessing private data members and program behavior?",
+      "score": 0.659,
+      "reward": -0.05705999999999996
+    },
+    {
+      "q": "How does the relationship between operator operands and function arguments affect the choice of using a member function or a friend function for overloading operators?",
+      "score": 1.0,
+      "reward": 0.14536129032258066
+    },
+    {
+      "q": "What happens when a class does not explicitly include a constructor, as shown in the existing content, and an object of its associated class is created?",
+      "score": 0.959,
+      "reward": 0.12729565217391298
+    },
+    {
+      "q": "How do the syntax rules for friend functions in operator overloading enable flexibility when defining a binary operator, and what implications does this have on the relationship between the operator's operands and function arguments?",
+      "score": 1.0,
+      "reward": 0.1525121951219513
+    },
+    {
+      "q": "What happens when `a = b;` is executed in the following code block? ```c #include <stdio.h>  int main() {     float a;     a = 10;     float b = 10.54f; // explicit conversion to float     a = b;      return 0; } ```",
+      "score": 1.0,
+      "reward": 0.15078571428571436
+    },
+    {
+      "q": "When would using a default constructor actually worsen program behavior when defining a class with both default and parameterized constructors? Consider the following code block:\n```\n\\npublic class Circle {\\n    public static void main(String[] args) {\\n        double radius = 1;\\n        System.out.println(\\\"The circle has a radius of \\\" + radius);\\n    }\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.15036595744680845
+    },
+    {
+      "q": "When would you choose to overload a casting operator function as a class member function instead of using a friend function, and how does this relate to the requirement that the casting operator function should not specify a return type?",
+      "score": 0.602,
+      "reward": -0.084106976744186
+    },
+    {
+      "q": "When creating new overloaded operators, programmers cannot change the meaning of an intrinsic or built-in operator. What does this rule imply about overloading the '+' operator for a class object?",
+      "score": 1.0,
+      "reward": 0.14889999999999992
+    },
+    {
+      "q": "When choosing between using a destructor and not using one to manage memory, which approach would you prefer for a large codebase and why? Consider the following code:\n```\n\\nUnary operator \u2013 1\\n    Binary operator \u2013 2\\n{\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.10558571428571425
+    },
+    {
+      "q": "How do the rules for declaring destructors affect the behavior of a program when an object with block scope goes out of scope, as shown in the following code:\n```\n\\n#include <iostream>\\nusing namespace std;\\nclass Ceo {\\n    Ceo() { // Constructor\\n        cout << \\\"Welcome to the constructor! \\\\n\\\";\\n    }\\n    ~Ceo() { // Destructor\\n        cout << \\\"The destructor is now running. \\\\n\\\";\\n    }\\n};\\nint main()\\n{\\n    Demo demoObject; // Define a demo object;\\n    cout << \\\"This program demonstrates an object\\\\n\\\";\\n    cout << \\\"which has a constructor and destructor.\\\\n\\\";\\n}\\n\n```",
+      "score": 1.0,
+      "reward": 0.10387999999999997
+    },
+    {
+      "q": "What is the most significant limitation of unary operator overloading as a member function that unary operator overloading as a friend function does not address, considering the implications on accessing private data members and program behavior?",
+      "score": 1.0,
+      "reward": 0.14331875
+    },
+    {
+      "q": "Under what conditions would you prefer to use an overloaded casting operator function as a class member over using a friend function, and how does this relate to the requirement that the casting operator function should not specify a return type?",
+      "score": 0.66,
+      "reward": -0.04636818181818177
+    },
+    {
+      "q": "`Write function definition as normal Function name is keyword operator followed by the symbol for the operator being overloaded Example : operator + used to overload the addition operator (+) Using Member function (a non-static member function) Using Friend function the precedence or associativity of any operator the number of operands create a new operator (i.e., they can only overload existing operators) overload an operator outside of a class context Unary operator \u2013 0 Binary operator \u2013 1 returnType classname :: Operator OperatorSymbol (argument list) { }` What is the correct syntax for overloading an operator using a member function?",
+      "score": 1.0,
+      "reward": 0.14139999999999997
+    },
+    {
+      "q": "How do the syntax rules for friend functions in operator overloading enable flexibility when defining a binary operator, and what implications does this have on the relationship between the operator's operands and function arguments? Consider the following code block:\n```\n\\nOperator Overloading - C++ allows you to redefine standard operators work when used with class objects\\n  Using traditional operators with user-defined objects\\n  A way of achieving static polymorphism is Operator overloading\\n    Operator << is both the stream-insertion operator and the bitwise left-shift operator\\n\n```",
+      "score": 1.0,
+      "reward": 0.1559066666666667
+    }
+  ],
+  "total_questions": 199,
+  "overall_avg_score": 0.896,
+  "avg_by_difficulty": {
+    "basic": 0.934,
+    "intermediate": 0.883,
+    "advanced": 0.816
+  },
+  "avg_by_question_type": {
+    "factual": 0.837,
+    "inferential": 0.949,
+    "evaluative": 0.897
+  },
+  "avg_by_topic": {
+    "Object Oriented Programming": 0.904,
+    "Operator Functions": 0.873,
+    "Constructors": 0.885,
+    "Destructors": 0.96,
+    "Operator Overloading": 0.898
+  },
+  "final_mastered": [
+    "Object Oriented Programming"
+  ],
+  "topic_attempts": {
+    "Constructors": 48,
+    "Destructors": 15,
+    "Object Oriented Programming": 58,
+    "Operator Functions": 45,
+    "Operator Overloading": 33
+  },
+  "topic_avg_scores": {
+    "Constructors": 0.885,
+    "Destructors": 0.96,
+    "Object Oriented Programming": 0.904,
+    "Operator Functions": 0.873,
+    "Operator Overloading": 0.898
+  }
+}
