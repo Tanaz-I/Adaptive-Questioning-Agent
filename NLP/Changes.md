@@ -21,6 +21,43 @@ Material Recommendation
 Frontend Display
 
 
+#### Enhanced Question Generation & Retrieval Pipeline
+
+* **Question Generation**
+
+  * Improved quality and diversity (MCQs + code-based questions)
+  * Better context-aware question creation using merged + neighboring chunks
+  * Faster generation with optimized query + temperature tuning
+
+* **Retrieval Pipeline**
+
+  * Integrated **BM25 + RRF** for more accurate chunk retrieval
+  * Enhanced handling of code snippets for example-based questions
+  * Improved response parsing and pipeline stability
+
+* **Content Processing**
+
+  * Added **OCR support** for extracting text from images
+  * Implemented **global topic extraction** for better context understanding
+  * Improved summary generation and material recommendations
+
+* **Concept & Learning Enhancements**
+
+  * Initial **concept graph integration**
+  * Improved Q&A generation aligned with extracted topics
+  * Student simulation module with improved scoring
+
+* **Frontend Updates**
+
+  * Updated Flask frontend
+  * Added summary and simulation views
+
+* Improved pipeline reliability
+* Better handling of code in generated questions
+* General performance optimizations
+
+
+
 Retrieval System Comparison(retrieval_engine.py)
 ❌ BEFORE (Baseline System)
 
