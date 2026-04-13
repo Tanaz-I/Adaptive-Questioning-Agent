@@ -1,3 +1,26 @@
+NLP Architecture
+
+Input (Text / Images)  
+        ↓  
+   OCR (if needed)  
+        ↓  
+Topic Extraction → Concept Graph  
+        ↓  
+Chunking + Merging  
+        ↓  
+BM25 + RRF Retrieval  
+        ↓  
+Question Generation Engine  
+        ↓  
+Student Simulation  
+        ↓  
+Scoring + Feedback  
+        ↓  
+Material Recommendation  
+        ↓  
+Frontend Display
+
+
 Retrieval System Comparison(retrieval_engine.py)
 ❌ BEFORE (Baseline System)
 
